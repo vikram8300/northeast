@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Northeast FTTH GIS Competitive Map | Oak Hill Portfolio</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        #map { height: 600px; width: 100%; border-radius: 12px; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .leaflet-popup-content { margin: 12px 16px; min-width: 280px; max-width: 380px; }
+        .loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.9); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 12px;
+        }
+        .info-panel { max-height: 500px; overflow-y: auto; }
+        .stat-card { border-left: 3px solid; }
+        .source-link { color: #2563EB; text-decoration: underline; font-size: 10px; }
+        .source-link:hover { color: #1D4ED8; }
+        .tab-btn { transition: all 0.2s; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab-btn.active { border-bottom-color: #0D9488; color: #0D9488; font-weight: 600; }
+        .tab-btn:hover:not(.active) { color: #334155; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 2px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+
+        /* Collapsible panels */
+        .collapsible-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .collapsible-header::after { content: '\25BC'; font-size: 12px; transition: transform 0.3s; }
+        .collapsible-header.collapsed::after { transform: rotate(-90deg); }
+        .collapsible-content { transition: max-height 0.3s ease-out; overflow: hidden; }
+        .collapsible-content.collapsed { max-height: 0 !important; padding: 0 !important; }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            body { padding: 8px; }
+            #map { height: 50vh; min-height: 300px; border-radius: 8px; }
+            .leaflet-popup-content { min-width: 240px; margin: 8px 12px; font-size: 13px; }
+            .leaflet-popup-content-wrapper { max-width: 90vw; }
+            .mobile-stack { display: flex; flex-direction: column; gap: 12px; }
+            .mobile-full { width: 100% !important; }
+            .mobile-text-sm { font-size: 12px !important; }
+            .mobile-text-xs { font-size: 10px !important; }
+            .mobile-hidden { display: none !important; }
+            .touch-target { min-height: 44px; min-width: 44px; }
+        }
+        @media (max-width: 480px) {
+            #map { height: 45vh; min-height: 280px; }
+        }
+        .active\:scale-95:active { transform: scale(0.95); }
+        .active\:scale-98:active { transform: scale(0.98); }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-2 md:p-4">
+    <!-- Data & Logic -->
+    <script src="data.js"></script>
+    <script src="calculations.js"></script>
+    <script src="gonetspeed_bdc.js"></script>
+
+    <div class="max-w-[1440px] mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-slate-800 via-slate-700 to-emerald-900 rounded-xl p-3 md:p-5 mb-3 text-white">
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                <div>
+                    <p class="text-teal-400 text-[10px] md:text-xs font-semibold tracking-widest mb-1">GIS INTELLIGENCE TOOL</p>
+                    <h1 class="text-lg md:text-2xl font-extrabold">Northeast FTTH Competitive Map</h1>
+                    <p class="text-slate-300 text-xs md:text-sm mt-1">8 operators, 11 states | Census-block shading with source links</p>
+                </div>
+                <div class="text-left md:text-right text-xs">
+                    <p class="text-slate-400">Sources: FCC BDC, Press, Company Filings</p>
+                    <p class="text-white font-semibold">February 2026</p>
+                    <p class="text-teal-400 text-[10px] mt-1 cursor-pointer hover:underline" onclick="showSourcesModal()">View All Sources</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="bg-white rounded-t-xl border-b flex gap-1 px-2 overflow-x-auto">
+            <button class="tab-btn active py-3 px-4 text-sm whitespace-nowrap" onclick="switchTab('map')">GIS Map</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('profiles')">Operator Profiles</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('builds')">Build Pipeline</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('overlap')">Overlap Analysis</button>
+        </div>
+
+        <!-- ========== TAB 1: GIS MAP ========== -->
+        <div id="tab-map" class="tab-content active">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 mt-3">
+                <!-- Map Panel -->
+                <div class="lg:col-span-9">
+                    <div class="bg-white rounded-xl shadow-sm p-3 md:p-4">
+                        <!-- Oak Hill Combined Toggle -->
+                        <div class="flex items-center gap-3 mb-2 pb-2 border-b border-slate-100">
+                            <button id="oakHillToggle" onclick="toggleOakHill()" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style="background:#00A651;color:white;">
+                                Oak Hill Combined (GNS + GL)
+                            </button>
+                            <span class="text-[10px] text-slate-400" id="oakHillToggleLabel">Showing both operators</span>
+                        </div>
+                        <!-- FCC BDC Coverage Toggle -->
+                        <div class="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100 flex-wrap">
+                            <button id="bdcToggle" onclick="toggleBDCCoverage()" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style="background:#E2E8F0;color:#475569;">
+                                FCC BDC Coverage (Block Groups)
+                            </button>
+                            <select id="bdcStateFilter" onchange="filterBDCByState()" class="text-xs rounded-lg border border-slate-200 px-2 py-1.5 bg-white hidden">
+                                <option value="all">All States</option>
+                                <option value="CT">Connecticut</option>
+                                <option value="ME">Maine</option>
+                                <option value="MA">Massachusetts</option>
+                                <option value="NY">New York</option>
+                                <option value="PA">Pennsylvania</option>
+                                <option value="VT">Vermont</option>
+                            </select>
+                            <span id="bdcStats" class="text-[10px] text-slate-400 hidden">
+                                1,790 block groups | 481,632 BSLs | 6 states
+                            </span>
+                        </div>
+                        <!-- Provider Filters -->
+                        <div class="flex flex-wrap gap-1.5 mb-2 overflow-x-auto pb-1" id="filterBar"></div>
+                        <!-- Census Tract Buttons -->
+                        <div class="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide mb-2" id="tractButtons"></div>
+                        <!-- Map -->
+                        <div class="relative">
+                            <div id="map"></div>
+                            <div id="loadingOverlay" class="loading-overlay hidden">
+                                <div class="text-center">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto mb-2"></div>
+                                    <p class="text-slate-600 text-sm">Loading census data...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Legend -->
+                        <div class="mt-3 grid grid-cols-4 md:flex md:flex-wrap gap-1.5 md:gap-3 text-[9px] md:text-xs text-slate-600" id="legendBar"></div>
+                    </div>
+
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#00A651">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Oak Hill Combined (Loaded)</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="oakHillPassings">0</p>
+                            <p class="text-[10px] text-slate-400">GoNetSpeed + Greenlight</p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#0066CC">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Fidium Passings (Loaded)</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="fidiumPassings">0</p>
+                            <a href="https://www.fidiumfiber.com/" target="_blank" class="text-[10px] text-sky-500 underline">Fidium Fiber</a>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#CD040B">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Overlap Tracts</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="overlapCount">0</p>
+                            <a href="https://broadbandmap.fcc.gov/" target="_blank" class="text-[10px] text-sky-500 underline">FCC BDC check</a>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#F47920">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Est. Build Cost</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="totalBuildCost">$0</p>
+                            <p class="text-[10px] text-slate-400">HU x $/passing</p>
+                        </div>
+                    </div>
+
+                    <!-- Build Announcements Table -->
+                    <div class="bg-white rounded-xl shadow-sm p-3 mt-3">
+                        <div class="collapsible-header mb-2" onclick="toggleCollapsible(this)">
+                            <h3 class="font-semibold text-slate-800 text-sm">Announced Builds (with Sources)</h3>
+                            <span class="text-xs text-slate-400 lg:hidden">tap to expand</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <div class="overflow-x-auto -mx-3 px-3">
+                                <table class="w-full text-xs min-w-[700px]">
+                                    <thead>
+                                        <tr class="border-b text-left text-slate-500">
+                                            <th class="pb-2 pr-2">Provider</th>
+                                            <th class="pb-2 pr-2">Market</th>
+                                            <th class="pb-2 pr-2">State</th>
+                                            <th class="pb-2 pr-2">Status</th>
+                                            <th class="pb-2 pr-2">Target HHP</th>
+                                            <th class="pb-2 pr-2">Timeline</th>
+                                            <th class="pb-2 pr-2">Overlap</th>
+                                            <th class="pb-2 pr-2">Notes</th>
+                                            <th class="pb-2">Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="buildTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel -->
+                <div class="lg:col-span-3 space-y-3 info-panel">
+                    <!-- Quick Navigation -->
+                    <div class="bg-white rounded-xl shadow-sm p-3">
+                        <div class="collapsible-header mb-2" onclick="toggleCollapsible(this)">
+                            <h3 class="font-semibold text-slate-800 text-sm">Quick Navigation</h3>
+                            <span class="text-xs text-slate-400 lg:hidden">tap to expand</span>
+                        </div>
+                        <div class="collapsible-content" id="navPanel">
+                            <div class="grid grid-cols-2 lg:grid-cols-1 gap-1.5" id="navButtons"></div>
+                        </div>
+                    </div>
+
+                    <!-- Census Tract Details -->
+                    <div class="bg-white rounded-xl shadow-sm p-3" id="tractInfo">
+                        <h3 class="font-semibold text-slate-800 mb-2 text-sm">Census Tract Details</h3>
+                        <p class="text-slate-500 text-xs">Tap a census tract on the map to see build economics</p>
+                    </div>
+
+                    <!-- Overlap Alerts -->
+                    <div class="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-3">
+                        <div class="collapsible-header mb-2" onclick="toggleCollapsible(this)">
+                            <h3 class="font-bold text-red-800 text-xs">Key Overlap Zones</h3>
+                            <span class="text-xs text-red-400 lg:hidden">tap</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <div class="space-y-2 text-[11px]">
+                                <div><p class="text-red-700 font-semibold">Connecticut (4-way)</p><p class="text-red-600 text-[10px]">GoNetSpeed 65+ towns vs Frontier 111 communities + Comcast + Altice</p></div>
+                                <div><p class="text-red-700 font-semibold">Southern ME (Triple)</p><p class="text-red-600 text-[10px]">GoNetSpeed + Fidium + Breezeline in Sanford</p></div>
+                                <div><p class="text-red-700 font-semibold">Scranton, PA</p><p class="text-red-600 text-[10px]">Empire 176mi vs Greenlight/Loop direct overbuild</p></div>
+                                <div><p class="text-red-700 font-semibold">Albany, NY</p><p class="text-red-600 text-[10px]">GoNetSpeed + Greenlight + Fidium 3-way</p></div>
+                                <div><p class="text-red-700 font-semibold">NH Statewide</p><p class="text-red-600 text-[10px]">Fidium 276K+ vs Breezeline 9 towns</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Provider Links -->
+                    <div class="bg-slate-800 rounded-xl p-3 text-white">
+                        <div class="collapsible-header mb-2" onclick="toggleCollapsible(this)">
+                            <h3 class="font-semibold text-sm">Provider Links</h3>
+                            <span class="text-xs text-slate-400 lg:hidden">tap</span>
+                        </div>
+                        <div class="collapsible-content" id="sourcesPanel">
+                            <div class="space-y-1 text-[10px]">
+                                <a href="https://www.gonetspeed.com/" target="_blank" class="block underline" style="color:#5CDB95">GoNetSpeed (Oak Hill) - 390K+ HHP</a>
+                                <a href="https://www.greenlightnetworks.com/" target="_blank" class="block underline" style="color:#B088D4">Greenlight Networks (Oak Hill) - 225K+ HHP</a>
+                                <a href="https://www.fidiumfiber.com/" target="_blank" class="block underline" style="color:#66A3E0">Fidium Fiber (Searchlight) - 1M+ NE locations</a>
+                                <a href="https://www.empireaccess.com/" target="_blank" class="block underline" style="color:#F9A866">Empire Access (Antin) - 96K addresses</a>
+                                <a href="https://broadbandnow.com/Slic-Network-Solutions" target="_blank" class="block underline" style="color:#5B8DB8">SLIC Networks (SDC) - 100+ NY towns</a>
+                                <a href="https://www.verizon.com/home/internet/fios-fastest-internet/availability/" target="_blank" class="block underline" style="color:#FF6666">Verizon Fios - ~30M passings</a>
+                                <a href="https://www.breezeline.com/" target="_blank" class="block underline" style="color:#66E0D8">Breezeline (Cogeco) - ~1.8M HHP</a>
+                                <div class="border-t border-slate-600 pt-2 mt-2">
+                                    <p class="text-yellow-400 font-medium mb-1">FCC BDC Audit Links:</p>
+                                    <a href="https://broadbandmap.fcc.gov/data-download/fixed" target="_blank" class="block text-sky-400 hover:text-sky-300 underline mb-1">FCC BDC Raw Data Downloads</a>
+                                    <a href="https://broadbandmap.fcc.gov/location-summary" target="_blank" class="block text-sky-400 hover:text-sky-300 underline mb-1">FCC Address Lookup Tool</a>
+                                    <a href="https://www.fcc.gov/BroadbandData/filers" target="_blank" class="block text-sky-400 hover:text-sky-300 underline mb-1">BDC Provider Filing Records</a>
+                                    <p class="text-slate-500 text-[10px] mt-1">Verify any coverage claim at specific addresses</p>
+                                </div>
+                                <div class="border-t border-slate-600 pt-2 mt-2">
+                                    <p class="text-slate-400">Data: FCC BDC Jun 2025</p>
+                                    <p class="text-slate-400">Housing: ACS 2020 5-Year</p>
+                                    <a href="https://data.census.gov/table?q=housing+units" target="_blank" class="block text-sky-400 hover:text-sky-300 underline text-[10px]">Census ACS Housing Data</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Methodology -->
+                    <div class="bg-amber-50 border border-amber-300 rounded-xl p-3">
+                        <h3 class="font-semibold text-amber-800 text-xs mb-1">Data Methodology</h3>
+                        <p class="text-[9px] text-amber-700 leading-relaxed">Census tract data sourced from <strong>press releases, company websites, & FCC BDC</strong>. Housing units from ACS 2020 5-Year estimates. Cost/passing uses $750 urban, $825-850 suburban, $1,100+ rural benchmarks. Polygon boundaries are approximate town/neighborhood extents. All source links are clickable.</p>
+                    </div>
+
+                    <!-- Build Cost Assumptions -->
+                    <div class="bg-white rounded-xl shadow-sm p-3 hidden lg:block">
+                        <h3 class="font-semibold text-slate-800 mb-2 text-sm">Build Cost Assumptions</h3>
+                        <div class="space-y-1 text-xs">
+                            <div class="flex justify-between text-slate-600"><span>Urban (&gt;2K HU/mi2)</span><span class="font-medium">$750</span></div>
+                            <div class="flex justify-between text-slate-600"><span>Suburban (500-2K)</span><span class="font-medium">$825-850</span></div>
+                            <div class="flex justify-between text-slate-600"><span>Rural (&lt;500)</span><span class="font-medium">$1,100+</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== TAB 2: OPERATOR PROFILES ========== -->
+        <div id="tab-profiles" class="tab-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" id="profileCards"></div>
+        </div>
+
+        <!-- ========== TAB 3: BUILD PIPELINE ========== -->
+        <div id="tab-builds" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <h2 class="font-bold text-lg text-slate-800 mb-4">Build Pipeline (All Operators)</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs min-w-[900px]">
+                        <thead>
+                            <tr class="border-b text-left text-slate-500">
+                                <th class="pb-2 px-3">Provider</th><th class="pb-2 px-3">Market</th><th class="pb-2 px-3">State</th>
+                                <th class="pb-2 px-3">Status</th><th class="pb-2 px-3">Target HHP</th><th class="pb-2 px-3">Timeline</th>
+                                <th class="pb-2 px-3">Overlap Risk</th><th class="pb-2 px-3">Notes</th><th class="pb-2 px-3">Source</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fullBuildTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== TAB 4: OVERLAP ANALYSIS ========== -->
+        <div id="tab-overlap" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <h2 class="font-bold text-lg text-slate-800 mb-4">Market Overlap Matrix</h2>
+                <p class="text-xs text-slate-500 mb-4">Each dot shows operator presence. Purple = contested overlap zone.</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs min-w-[1000px]">
+                        <thead>
+                            <tr class="border-b text-center text-slate-500">
+                                <th class="pb-2 px-2 text-left">Market</th><th class="pb-2 px-2">State</th>
+                                <th class="pb-2 px-1">GNS</th><th class="pb-2 px-1">GL</th><th class="pb-2 px-1">FDM</th>
+                                <th class="pb-2 px-1">EMP</th><th class="pb-2 px-1">SLIC</th><th class="pb-2 px-1">VZ</th>
+                                <th class="pb-2 px-1">FTR</th><th class="pb-2 px-1">BRZ</th><th class="pb-2 px-2">Cable</th>
+                                <th class="pb-2 px-2">Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overlapMatrix"></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- State Heat Map -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <h2 class="font-bold text-lg text-slate-800 mb-4">State-Level Overlap Heat Map</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="stateHeatMap"></div>
+            </div>
+            <!-- FCC BDC Incremental Analysis -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <h2 class="font-bold text-lg text-slate-800">FCC BDC vs. Announced Builds</h2>
+                    <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">INCREMENTAL ANALYSIS</span>
+                </div>
+                <p class="text-xs text-slate-500 mb-4">Compares what FCC BDC currently reports as served (Jun 2025 filing) vs. builds announced in press releases. Shows what's genuinely incremental (new territory) vs. technology upgrades (copper-to-fiber).</p>
+                <div class="space-y-4" id="incrementalAnalysis"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculation Modal -->
+    <div id="calcModal" class="modal-overlay hidden" onclick="if(event.target===this)closeCalcModal()">
+        <div class="modal-content">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="font-bold text-sm text-slate-800">Calculation Methodology</h3>
+                <button onclick="closeCalcModal()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+            <div id="calcModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Sources Modal -->
+    <div id="sourcesModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSourcesModal()">
+        <div class="modal-content">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="font-bold text-sm text-slate-800">All Data Sources</h3>
+                <button onclick="closeSourcesModal()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+            <div id="sourcesModalBody" class="p-4 text-xs space-y-2 max-h-[60vh] overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+    // ================================================================
+    // INITIALIZATION
+    // ================================================================
+    const map = L.map('map').setView([42.2, -74.5], 7);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19
+    }).addTo(map);
+    L.control.scale({ imperial: true, metric: true }).addTo(map);
+
+    // Layer groups for each provider
+    const layers = {};
+    Object.keys(PROVIDERS).forEach(id => {
+        layers[id] = L.layerGroup().addTo(map);
+    });
+    const censusLayer = L.layerGroup().addTo(map);
+    const bdcCoverageLayer = L.layerGroup(); // Off by default - added on toggle
+
+    // Stats
+    let stats = { oakHillPassings: 0, fidiumPassings: 0, overlapCount: 0, totalBuildCost: 0, totalPassings: 0, loadedTracts: 0 };
+
+    // Oak Hill combined toggle
+    let oakHillMode = true; // default: show both GNS + GL together
+    function toggleOakHill() {
+        oakHillMode = !oakHillMode;
+        const btn = document.getElementById('oakHillToggle');
+        const label = document.getElementById('oakHillToggleLabel');
+        if (oakHillMode) {
+            btn.style.background = '#00A651';
+            btn.style.color = 'white';
+            label.textContent = 'Showing both operators';
+            // Show both
+            map.addLayer(layers.gonet);
+            map.addLayer(layers.greenlight);
+            const gonetCb = document.getElementById('show_gonet');
+            const glCb = document.getElementById('show_greenlight');
+            if (gonetCb) gonetCb.checked = true;
+            if (glCb) glCb.checked = true;
+        } else {
+            btn.style.background = '#E2E8F0';
+            btn.style.color = '#64748B';
+            label.textContent = 'Toggle individual operators below';
+        }
+    }
+
+    // Provider colors for census tracts
+    const providerColorMap = {
+        'GoNetSpeed': '#00A651', 'Greenlight': '#6B2D8B', 'Fidium': '#0066CC',
+        'Empire': '#F47920', 'SLIC': '#003B6F', 'Breezeline': '#00B8A9',
+        'Frontier': '#EE0000', 'Verizon': '#CD040B', 'Oak Hill': '#00A651'
+    };
+
+    function getProviderColor(providerStr) {
+        if (!providerStr) return '#6B7280';
+        for (const [name, color] of Object.entries(providerColorMap)) {
+            if (providerStr.includes(name)) return color;
+        }
+        return '#6B7280';
+    }
+
+    // ================================================================
+    // COLLAPSIBLE PANELS
+    // ================================================================
+    function toggleCollapsible(header) {
+        const content = header.nextElementSibling;
+        const isCollapsed = content.classList.contains('collapsed');
+        if (isCollapsed) {
+            content.classList.remove('collapsed');
+            content.style.maxHeight = content.scrollHeight + 'px';
+            header.classList.remove('collapsed');
+        } else {
+            content.classList.add('collapsed');
+            content.style.maxHeight = '0';
+            header.classList.add('collapsed');
+        }
+    }
+
+    function initMobileCollapsibles() {
+        const isMobile = window.innerWidth < 1024;
+        document.querySelectorAll('.collapsible-content').forEach(content => {
+            if (isMobile && content.classList.contains('collapsed')) {
+                content.style.maxHeight = '0';
+            } else if (!isMobile) {
+                content.style.maxHeight = 'none';
+                content.classList.remove('collapsed');
+            }
+        });
+    }
+    window.addEventListener('load', initMobileCollapsibles);
+    window.addEventListener('resize', initMobileCollapsibles);
+
+    // ================================================================
+    // TAB SWITCHING
+    // ================================================================
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.classList.add('text-slate-500'); });
+        document.getElementById('tab-' + tabId).classList.add('active');
+        // Find the tab button that matches this tabId
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabMap = { map: 0, profiles: 1, builds: 2, overlap: 3 };
+        if (tabBtns[tabMap[tabId]]) {
+            tabBtns[tabMap[tabId]].classList.add('active');
+            tabBtns[tabMap[tabId]].classList.remove('text-slate-500');
+        }
+        if (tabId === 'map') setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    // ================================================================
+    // FILTER BAR
+    // ================================================================
+    const filterBar = document.getElementById('filterBar');
+    Object.entries(PROVIDERS).forEach(([id, prov]) => {
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-1.5 cursor-pointer px-2 py-1.5 rounded-lg min-h-[36px] transition-colors';
+        label.style.background = prov.color + '10';
+        label.innerHTML = `
+            <input type="checkbox" id="show_${id}" checked class="w-4 h-4 rounded" style="accent-color:${prov.color}">
+            <span class="w-2.5 h-2.5 rounded-full" style="background:${prov.color}"></span>
+            <span class="text-xs font-medium">${prov.short}</span>`;
+        filterBar.appendChild(label);
+        label.querySelector('input').addEventListener('change', e => {
+            e.target.checked ? map.addLayer(layers[id]) : map.removeLayer(layers[id]);
+        });
+    });
+
+    // ================================================================
+    // CENSUS TRACT LOCATION BUTTONS
+    // ================================================================
+    const tractLocations = {
+        hartford_ct: { label: 'Hartford CT', bg: '#CCFBF1', text: '#0F766E', coords: [41.76, -72.68], zoom: 11 },
+        fairfield_ct: { label: 'Fairfield CT', bg: '#CCFBF1', text: '#0F766E', coords: [41.20, -73.30], zoom: 10 },
+        nh_central: { label: 'NH Central', bg: '#D1E8FF', text: '#1E40AF', coords: [43.20, -71.40], zoom: 10 },
+        scranton_pa: { label: 'Scranton PA', bg: '#FFEDD5', text: '#9A3412', coords: [41.35, -75.75], zoom: 11 },
+        albany_ny: { label: 'Albany NY', bg: '#EDE9FE', text: '#6D28D9', coords: [42.75, -73.80], zoom: 11 },
+        southern_me: { label: 'Southern ME', bg: '#CCFBF1', text: '#0F766E', coords: [43.60, -70.35], zoom: 10 },
+        rochester_ny: { label: 'Rochester NY', bg: '#EDE9FE', text: '#6D28D9', coords: [43.16, -77.61], zoom: 12 },
+        buffalo_ny: { label: 'Buffalo NY', bg: '#EDE9FE', text: '#6D28D9', coords: [42.95, -78.88], zoom: 11 },
+        binghamton_ny: { label: 'Binghamton NY', bg: '#EDE9FE', text: '#6D28D9', coords: [42.10, -75.91], zoom: 12 },
+        hudson_valley_ny: { label: 'Hudson Valley', bg: '#EDE9FE', text: '#6D28D9', coords: [41.60, -73.95], zoom: 10 },
+        north_country_ny: { label: 'N. Country NY', bg: '#D1E8FF', text: '#1E3A5F', coords: [44.60, -74.60], zoom: 9 },
+        utica_ny: { label: 'Utica NY', bg: '#CCFBF1', text: '#0F766E', coords: [43.10, -75.23], zoom: 12 },
+        southern_tier_ny: { label: 'S. Tier NY', bg: '#FFEDD5', text: '#9A3412', coords: [42.50, -76.50], zoom: 10 },
+        baltimore_md: { label: 'Baltimore MD', bg: '#EDE9FE', text: '#6D28D9', coords: [39.32, -76.62], zoom: 12 },
+        springfield_ma: { label: 'Springfield MA', bg: '#CCFBF1', text: '#0F766E', coords: [42.11, -72.59], zoom: 12 },
+        burlington_vt: { label: 'Burlington VT', bg: '#CCFBF1', text: '#0F766E', coords: [44.48, -73.20], zoom: 12 },
+        nj_suburbs: { label: 'New Jersey', bg: '#FEE2E2', text: '#991B1B', coords: [40.45, -74.30], zoom: 10 },
+        newport_ri: { label: 'Newport RI', bg: '#CCFBF1', text: '#0F766E', coords: [41.49, -71.31], zoom: 13 },
+        lehigh_valley_pa: { label: 'Lehigh Valley', bg: '#FEE2E2', text: '#991B1B', coords: [40.62, -75.40], zoom: 11 },
+        wv_eastern: { label: 'E. Panhandle WV', bg: '#CCFBF1', text: '#0F766E', coords: [39.40, -77.92], zoom: 11 },
+        williamsport_pa: { label: 'Williamsport', bg: '#FFEDD5', text: '#9A3412', coords: [41.24, -76.92], zoom: 12 }
+    };
+
+    const tractBtnContainer = document.getElementById('tractButtons');
+    Object.entries(tractLocations).forEach(([key, loc]) => {
+        const btn = document.createElement('button');
+        btn.className = 'flex-shrink-0 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-transform';
+        btn.style.background = loc.bg;
+        btn.style.color = loc.text;
+        btn.textContent = loc.label;
+        btn.onclick = () => loadCensusTracts(key);
+        tractBtnContainer.appendChild(btn);
+    });
+    // Load All button
+    const loadAllBtn = document.createElement('button');
+    loadAllBtn.className = 'flex-shrink-0 px-3 py-2 rounded-lg text-sm font-bold min-h-[40px] transition-transform';
+    loadAllBtn.style.background = '#1E293B';
+    loadAllBtn.style.color = '#FFF';
+    loadAllBtn.textContent = 'Load All';
+    loadAllBtn.onclick = loadAllTracts;
+    tractBtnContainer.appendChild(loadAllBtn);
+    // Clear button
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'flex-shrink-0 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 min-h-[40px] transition-transform';
+    clearBtn.textContent = 'Clear';
+    clearBtn.onclick = clearCensusTracts;
+    tractBtnContainer.appendChild(clearBtn);
+
+    // Nav panel buttons
+    const navContainer = document.getElementById('navButtons');
+    Object.entries(tractLocations).forEach(([key, loc]) => {
+        const btn = document.createElement('button');
+        btn.className = 'text-left px-2.5 py-2 rounded-lg text-sm flex justify-between items-center min-h-[40px] transition-transform';
+        btn.style.background = loc.bg + '80';
+        btn.style.color = loc.text;
+        btn.innerHTML = `<span>${loc.label}</span>`;
+        btn.onclick = () => loadCensusTracts(key);
+        navContainer.appendChild(btn);
+    });
+    const overviewBtn = document.createElement('button');
+    overviewBtn.className = 'text-left px-2.5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium min-h-[40px] active:scale-98 transition-transform';
+    overviewBtn.textContent = 'Full Region';
+    overviewBtn.onclick = () => map.flyTo([42.2, -74.5], 7, { duration: 1.5 });
+    navContainer.appendChild(overviewBtn);
+
+    // ================================================================
+    // LEGEND
+    // ================================================================
+    const legendBar = document.getElementById('legendBar');
+    Object.entries(PROVIDERS).forEach(([id, prov]) => {
+        legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-full" style="background:${prov.color}"></div><span>${prov.short}</span></div>`;
+    });
+    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-pink-500 to-red-500 animate-pulse"></div><span>New Build</span></div>`;
+    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-full bg-purple-500" style="border: 2px dashed #7C3AED;"></div><span>Overlap</span></div>`;
+    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#CCFBF1,#0D9488);"></div><span>BDC Coverage</span></div>`;
+
+    // ================================================================
+    // MAP MARKERS
+    // ================================================================
+    function createMarkerIcon(color, isNew, size) {
+        const s = size || 10;
+        return L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="width:${s}px;height:${s}px;background:${color};border-radius:50%;border:2px solid ${color}88;box-shadow:0 2px 6px rgba(0,0,0,0.3);${isNew ? 'animation:pulse 1.5s infinite;' : ''}"></div>`,
+            iconSize: [s, s], iconAnchor: [s/2, s/2]
+        });
+    }
+
+    MARKETS.forEach(m => {
+        const prov = PROVIDERS[m.provider];
+        if (!prov) return;
+        const marker = L.marker([m.lat, m.lng], { icon: createMarkerIcon(prov.color, m.isNew, m.size) });
+        marker.bindPopup(mapPopupHTML(m));
+        if (layers[m.provider]) layers[m.provider].addLayer(marker);
+    });
+
+    // ================================================================
+    // CENSUS TRACT LOADING (Ziply GIS pattern)
+    // ================================================================
+    function formatCurrency(num) {
+        if (num >= 1000000) return '$' + (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return '$' + (num / 1000).toFixed(0) + 'K';
+        return '$' + num.toLocaleString();
+    }
+
+    function updateStats() {
+        document.getElementById('oakHillPassings').textContent = stats.oakHillPassings.toLocaleString();
+        document.getElementById('fidiumPassings').textContent = stats.fidiumPassings.toLocaleString();
+        document.getElementById('overlapCount').textContent = stats.overlapCount;
+        document.getElementById('totalBuildCost').textContent = formatCurrency(stats.totalBuildCost);
+    }
+
+    function buildTractPopup(tract, data, estBuildCost, fillColor) {
+        return `
+            <div style="min-width:300px;font-family:Inter,-apple-system,sans-serif;">
+                <div style="font-size:11px;color:#64748B;margin-bottom:4px;">Census Tract ${tract.id} | ${data.county}, ${data.state}</div>
+                <div style="font-weight:700;font-size:16px;margin-bottom:8px;color:#1E293B;">${tract.name}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                    <div style="background:#F1F5F9;padding:8px;border-radius:6px;">
+                        <div style="font-size:10px;color:#64748B;">Housing Units (ACS)</div>
+                        <div style="font-weight:700;font-size:18px;color:#0F172A;">${tract.housingUnits.toLocaleString()}</div>
+                    </div>
+                    <div style="background:#F1F5F9;padding:8px;border-radius:6px;">
+                        <div style="font-size:10px;color:#64748B;">Est. Build Cost</div>
+                        <div style="font-weight:700;font-size:18px;color:#0F172A;">${formatCurrency(estBuildCost)}</div>
+                    </div>
+                </div>
+                ${tract.announcedPassings ? `
+                <div style="background:#FEF2F2;padding:8px;border-radius:6px;margin-bottom:8px;border-left:3px solid #DC2626;">
+                    <div style="font-size:10px;color:#991B1B;">Announced Target Passings</div>
+                    <div style="font-weight:700;font-size:16px;color:#DC2626;">${tract.announcedPassings.toLocaleString()} HH</div>
+                </div>` : ''}
+                <div style="border-top:1px solid #E2E8F0;padding-top:8px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                        <span style="color:#64748B;font-size:12px;">Cost per Passing</span>
+                        <span style="font-weight:600;font-size:12px;">$${tract.costPerPassing}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="color:#64748B;font-size:12px;">Provider</span>
+                        <span style="font-weight:600;font-size:12px;padding:2px 8px;border-radius:4px;background:${fillColor}22;color:${fillColor};">${tract.provider}</span>
+                    </div>
+                </div>
+                <div style="background:${tract.isNew ? '#FEF2F2' : '#F8FAFC'};padding:8px;border-radius:6px;border-left:3px solid ${tract.isNew ? '#DC2626' : '#94A3B8'};">
+                    <div style="font-size:11px;font-weight:600;color:${tract.isNew ? '#991B1B' : '#475569'};margin-bottom:4px;">
+                        Status: ${tract.permitStatus}
+                    </div>
+                    <div style="font-size:10px;color:#64748B;margin-bottom:4px;">
+                        <strong>Source:</strong> ${tract.sourceType}
+                    </div>
+                    <a href="${tract.sourceUrl}" target="_blank" style="font-size:10px;color:#0EA5E9;text-decoration:underline;">
+                        ${tract.sourceText}
+                    </a>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#475569;font-style:italic;">${tract.notes}</div>
+                ${tract.fccProviders && tract.fccProviders.length ? `
+                <div style="margin-top:10px;padding-top:8px;border-top:2px solid #3B82F6;">
+                    <div style="font-size:11px;font-weight:700;color:#1E40AF;margin-bottom:6px;">FCC BDC Provider Filings</div>
+                    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                        <tr style="background:#EFF6FF;">
+                            <th style="text-align:left;padding:4px 6px;color:#1E40AF;font-weight:600;">Provider</th>
+                            <th style="text-align:left;padding:4px 6px;color:#1E40AF;font-weight:600;">Tech</th>
+                            <th style="text-align:right;padding:4px 6px;color:#1E40AF;font-weight:600;">Down/Up</th>
+                            <th style="text-align:right;padding:4px 6px;color:#1E40AF;font-weight:600;">BSLs</th>
+                        </tr>
+                        ${tract.fccProviders.map((p, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};border-bottom:1px solid #E2E8F0;">
+                            <td style="padding:3px 6px;font-weight:500;color:#334155;white-space:nowrap;">${p.name}</td>
+                            <td style="padding:3px 6px;color:${p.tech === 'Fiber' ? '#059669' : p.tech === 'Cable (DOCSIS)' ? '#D97706' : p.tech === 'Fixed Wireless' ? '#7C3AED' : '#94A3B8'};">
+                                ${p.tech === 'Fiber' ? '🟢' : p.tech === 'Cable (DOCSIS)' ? '🟡' : p.tech === 'Fixed Wireless' ? '🟣' : '⚪'} ${p.tech}
+                            </td>
+                            <td style="padding:3px 6px;text-align:right;font-weight:500;">${p.maxDown >= 1000 ? (p.maxDown/1000)+'G' : p.maxDown+'M'}/${p.maxUp >= 1000 ? (p.maxUp/1000)+'G' : p.maxUp+'M'}</td>
+                            <td style="padding:3px 6px;text-align:right;font-weight:600;color:#0F172A;">${p.bslCount.toLocaleString()}</td>
+                        </tr>`).join('')}
+                    </table>
+                    <div style="font-size:9px;color:#94A3B8;margin-top:4px;">Source: FCC Broadband Data Collection (Jun 2025 filing). BSL = Broadband Serviceable Locations.</div>
+                </div>` : ''}
+                ${tract.fccCheck ? `
+                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #E2E8F0;background:#EFF6FF;padding:8px;border-radius:4px;">
+                    <a href="${tract.fccCheck}" target="_blank" style="font-size:10px;color:#2563EB;text-decoration:underline;font-weight:600;">
+                        Verify on FCC Broadband Map
+                    </a>
+                </div>` : ''}
+            </div>`;
+    }
+
+    function loadCensusTracts(areaKey) {
+        const data = CENSUS_TRACTS[areaKey];
+        if (!data) return;
+
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+
+        setTimeout(() => {
+            data.tracts.forEach(tract => {
+                const estBuildCost = tract.housingUnits * tract.costPerPassing;
+                const provStr = tract.provider || '';
+
+                let fillColor, strokeColor;
+                if (tract.overlap) {
+                    fillColor = '#9333EA'; strokeColor = '#7C3AED';
+                    stats.overlapCount++;
+                } else {
+                    fillColor = getProviderColor(provStr);
+                    strokeColor = fillColor;
+                }
+
+                // Track stats
+                if (provStr.includes('GoNetSpeed') || provStr.includes('Greenlight')) {
+                    stats.oakHillPassings += tract.announcedPassings || tract.housingUnits;
+                }
+                if (provStr.includes('Fidium')) {
+                    stats.fidiumPassings += tract.announcedPassings || tract.housingUnits;
+                }
+                stats.totalBuildCost += estBuildCost;
+                stats.totalPassings += tract.housingUnits;
+                stats.loadedTracts++;
+
+                const polygon = L.polygon(tract.coords, {
+                    color: strokeColor,
+                    fillColor: fillColor,
+                    fillOpacity: tract.isNew ? 0.35 : 0.2,
+                    weight: tract.isNew ? 3 : 1.5,
+                    dashArray: tract.overlap ? '5, 5' : null
+                });
+
+                polygon.bindPopup(buildTractPopup(tract, data, estBuildCost, fillColor));
+                polygon.on('click', () => updateTractInfo(tract, data, estBuildCost, fillColor));
+                censusLayer.addLayer(polygon);
+            });
+
+            updateStats();
+            document.getElementById('loadingOverlay').classList.add('hidden');
+
+            // Fly to location
+            const loc = tractLocations[areaKey];
+            if (loc) map.flyTo(loc.coords, loc.zoom, { duration: 1.5 });
+        }, 200);
+    }
+
+    function updateTractInfo(tract, data, estBuildCost, color) {
+        document.getElementById('tractInfo').innerHTML = `
+            <h3 class="font-semibold text-slate-800 mb-3 text-sm">Census Tract Details</h3>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-xs text-slate-500">Tract ${tract.id} | ${data.county}</p>
+                    <p class="font-semibold text-lg">${tract.name}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-50 p-2 rounded">
+                        <p class="text-xs text-slate-500">Passings (ACS)</p>
+                        <p class="font-bold text-lg">${tract.housingUnits.toLocaleString()}</p>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded">
+                        <p class="text-xs text-slate-500">Build Cost</p>
+                        <p class="font-bold text-lg">${formatCurrency(estBuildCost)}</p>
+                    </div>
+                </div>
+                ${tract.announcedPassings ? `
+                <div class="bg-red-50 p-2 rounded border-l-2 border-red-500">
+                    <p class="text-xs text-red-600">Announced Target</p>
+                    <p class="font-bold text-lg text-red-700">${tract.announcedPassings.toLocaleString()} HH</p>
+                </div>` : ''}
+                <div class="text-sm space-y-1">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Provider</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-medium" style="background:${color}22;color:${color};">${tract.provider}</span>
+                    </div>
+                </div>
+                <div class="pt-2 border-t">
+                    <p class="text-xs font-medium text-slate-600 mb-1">Source</p>
+                    <a href="${tract.sourceUrl}" target="_blank" class="text-xs text-sky-600 underline">${tract.sourceText}</a>
+                </div>
+                ${tract.fccProviders && tract.fccProviders.length ? `
+                <div class="mt-3 pt-2 border-t-2 border-blue-500">
+                    <p class="text-xs font-bold text-blue-800 mb-2">FCC BDC Provider Filings</p>
+                    <div class="space-y-1.5">
+                        ${tract.fccProviders.map(p => `
+                        <div class="flex justify-between items-center text-xs bg-slate-50 rounded px-2 py-1.5">
+                            <div>
+                                <span class="font-medium text-slate-700">${p.name}</span>
+                                <span class="ml-1 text-[10px] ${p.tech === 'Fiber' ? 'text-emerald-600' : p.tech === 'Cable (DOCSIS)' ? 'text-amber-600' : p.tech === 'Fixed Wireless' ? 'text-violet-600' : 'text-slate-400'}">${p.tech}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-slate-800">${p.bslCount.toLocaleString()}</span>
+                                <span class="text-[10px] text-slate-400 ml-1">BSLs</span>
+                            </div>
+                        </div>`).join('')}
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1">FCC BDC Jun 2025. BSL = Broadband Serviceable Locations.</p>
+                </div>` : ''}
+                ${tract.fccCheck ? `
+                <a href="${tract.fccCheck}" target="_blank" class="block text-xs text-blue-600 underline font-medium mt-2">Verify on FCC Broadband Map</a>` : ''}
+                <p class="text-xs text-slate-500 italic">${tract.notes}</p>
+            </div>`;
+    }
+
+    function clearCensusTracts() {
+        censusLayer.clearLayers();
+        stats = { oakHillPassings: 0, fidiumPassings: 0, overlapCount: 0, totalBuildCost: 0, totalPassings: 0, loadedTracts: 0 };
+        updateStats();
+        document.getElementById('tractInfo').innerHTML = `<h3 class="font-semibold text-slate-800 mb-2 text-sm">Census Tract Details</h3><p class="text-slate-500 text-xs">Tap a census tract on the map to see build economics</p>`;
+    }
+
+    function loadAllTracts() {
+        clearCensusTracts();
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+        const allKeys = Object.keys(CENSUS_TRACTS);
+        let delay = 0;
+        allKeys.forEach((key, i) => {
+            setTimeout(() => {
+                const data = CENSUS_TRACTS[key];
+                data.tracts.forEach(tract => {
+                    const estBuildCost = tract.housingUnits * tract.costPerPassing;
+                    const provStr = tract.provider || '';
+                    let fillColor, strokeColor;
+                    if (tract.overlap) {
+                        fillColor = '#9333EA'; strokeColor = '#7C3AED';
+                        stats.overlapCount++;
+                    } else {
+                        fillColor = getProviderColor(provStr);
+                        strokeColor = fillColor;
+                    }
+                    if (provStr.includes('GoNetSpeed') || provStr.includes('Greenlight')) {
+                        stats.oakHillPassings += tract.announcedPassings || tract.housingUnits;
+                    }
+                    if (provStr.includes('Fidium')) {
+                        stats.fidiumPassings += tract.announcedPassings || tract.housingUnits;
+                    }
+                    stats.totalBuildCost += estBuildCost;
+                    stats.totalPassings += tract.housingUnits;
+                    stats.loadedTracts++;
+
+                    const polygon = L.polygon(tract.coords, {
+                        color: strokeColor, fillColor: fillColor,
+                        fillOpacity: tract.isNew ? 0.35 : 0.2,
+                        weight: tract.isNew ? 3 : 1.5,
+                        dashArray: tract.overlap ? '5, 5' : null
+                    });
+                    polygon.bindPopup(buildTractPopup(tract, data, estBuildCost, fillColor));
+                    polygon.on('click', () => updateTractInfo(tract, data, estBuildCost, fillColor));
+                    censusLayer.addLayer(polygon);
+                });
+                updateStats();
+                if (i === allKeys.length - 1) {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    map.flyTo([42.2, -74.5], 7, { duration: 1.5 });
+                }
+            }, delay);
+            delay += 100;
+        });
+    }
+
+    // ================================================================
+    // BUILD PIPELINE TABLE
+    // ================================================================
+    function populateBuildTable() {
+        const tbody = document.getElementById('buildTable');
+        const fullTbody = document.getElementById('fullBuildTable');
+        // Short table (first 10)
+        tbody.innerHTML = BUILD_PIPELINE.slice(0, 10).map(b => buildRowHTML(b)).join('');
+        // Full table
+        fullTbody.innerHTML = BUILD_PIPELINE.map(b => buildRowHTML(b)).join('');
+    }
+    populateBuildTable();
+
+    // ================================================================
+    // OPERATOR PROFILES
+    // ================================================================
+    function populateProfiles() {
+        const container = document.getElementById('profileCards');
+        container.innerHTML = OPERATOR_PROFILES.map(op => {
+            const prov = PROVIDERS[op.id];
+            const color = prov ? prov.color : '#6B7280';
+            return `
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div class="p-4 text-white" style="background:${color}">
+                        <h3 class="font-bold text-lg">${op.name}</h3>
+                        <p class="text-sm opacity-80">${op.sponsor} | ${op.hq}</p>
+                        <p class="text-xs opacity-60 mt-1">${op.states.join(', ')}</p>
+                    </div>
+                    <div class="p-4 space-y-1">
+                        ${op.metrics.map(m => metricWithSource(m.label, m.value + (m.asOf ? ` <span class="text-[10px] text-slate-400">(${m.asOf})</span>` : ''), m.source, m.sourceUrl, m.note)).join('')}
+                    </div>
+                </div>`;
+        }).join('');
+    }
+    populateProfiles();
+
+    // ================================================================
+    // OVERLAP MATRIX
+    // ================================================================
+    function populateOverlapMatrix() {
+        const tbody = document.getElementById('overlapMatrix');
+        tbody.innerHTML = OVERLAP_MATRIX.map(row => `
+            <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-2 text-xs font-medium">${row.market}</td>
+                <td class="py-2 px-2 text-xs text-center">${row.state}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.gns)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.gl)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.fidium)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.empire)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.slic)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.verizon)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.frontier)}</td>
+                <td class="py-2 px-1 text-center">${overlapCell(row.breezeline)}</td>
+                <td class="py-2 px-2 text-xs text-slate-500">${row.cable || ''}</td>
+                <td class="py-2 px-2">${riskBadge(row.risk)}</td>
+            </tr>
+            ${row.sourceNote ? `<tr class="bg-slate-50"><td colspan="12" class="py-1 px-4 text-[10px] text-slate-400 italic">${row.sourceNote}</td></tr>` : ''}
+        `).join('');
+    }
+    populateOverlapMatrix();
+
+    // State heat map
+    const stateRisks = [
+        { state: 'CT', risk: 'VERY HIGH', color: '#991B1B', bg: '#FEE2E2', note: 'GoNetSpeed 65+ towns vs Frontier 111 communities. 4-way.' },
+        { state: 'ME', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'GoNetSpeed + Fidium + Breezeline triple overlap in south.' },
+        { state: 'NH', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'Fidium 276K+ vs Breezeline 9 towns.' },
+        { state: 'PA', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'Scranton: Empire vs Greenlight/Loop. Williamsport: Empire vs FastBridge.' },
+        { state: 'NY (Albany)', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: '3-way: GoNetSpeed + Greenlight + Fidium.' },
+        { state: 'NY (Rochester)', risk: 'LOW', color: '#15803D', bg: '#DCFCE7', note: 'Greenlight HQ. Spectrum only competitor.' },
+        { state: 'NY (Buffalo)', risk: 'LOW', color: '#15803D', bg: '#DCFCE7', note: 'Greenlight expanding aggressively. 28K+ passed.' },
+        { state: 'MD', risk: 'MEDIUM', color: '#92400E', bg: '#FEF3C7', note: 'Greenlight $100M Baltimore greenfield. Comcast + Fios.' },
+    ];
+    document.getElementById('stateHeatMap').innerHTML = stateRisks.map(s => `
+        <div class="rounded-lg p-3" style="background:${s.bg}">
+            <p class="font-bold text-sm" style="color:${s.color}">${s.state}</p>
+            <p class="text-xs font-semibold mb-1" style="color:${s.color}">${s.risk}</p>
+            <p class="text-[10px]" style="color:${s.color}80">${s.note}</p>
+        </div>
+    `).join('');
+
+    // ================================================================
+    // FCC BDC INCREMENTAL ANALYSIS
+    // ================================================================
+    function populateIncrementalAnalysis() {
+        const container = document.getElementById('incrementalAnalysis');
+        if (!container || typeof FCC_INCREMENTAL === 'undefined') return;
+
+        container.innerHTML = FCC_INCREMENTAL.map(op => {
+            const prov = PROVIDERS[op.operatorId];
+            const color = prov ? prov.color : '#6B7280';
+            const isGenuinelyIncremental = !op.incrementalNote.includes('upgrade');
+
+            return `
+            <div class="border rounded-xl overflow-hidden">
+                <div class="p-3 text-white" style="background:${color}">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-sm">${op.operator}</h3>
+                        <span class="text-xs opacity-80">${isGenuinelyIncremental ? 'NEW TERRITORY' : 'MIXED (Upgrade + New)'}</span>
+                    </div>
+                </div>
+                <div class="p-4 space-y-3">
+                    <!-- FCC BDC Current -->
+                    <div class="flex gap-3">
+                        <div class="flex-1 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                            <p class="text-[10px] text-blue-600 font-semibold mb-1">FCC BDC (${op.fccBDCDate})</p>
+                            <p class="font-bold text-lg text-blue-900">${op.fccBDCPassings}</p>
+                            <a href="${op.fccBDCUrl}" target="_blank" class="text-[10px] text-blue-500 underline">FCC Data Download</a>
+                        </div>
+                        <div class="flex-1 bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                            <p class="text-[10px] text-emerald-600 font-semibold mb-1">Incremental (Announced)</p>
+                            <p class="font-bold text-lg text-emerald-900">${op.incrementalEstimate}</p>
+                            <p class="text-[10px] text-emerald-500">Not yet in BDC</p>
+                        </div>
+                    </div>
+
+                    <!-- Announced builds -->
+                    <div>
+                        <p class="text-xs font-semibold text-slate-600 mb-2">ANNOUNCED BUILDS (Post-BDC Filing)</p>
+                        <div class="space-y-1.5">
+                            ${op.announcedAdditional.map(a => `
+                            <div class="flex items-start justify-between gap-2 py-1.5 border-b border-slate-100">
+                                <div>
+                                    <span class="text-xs font-medium text-slate-800">${a.market}</span>
+                                    <span class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                        a.status.includes('Active') ? 'bg-green-100 text-green-700' :
+                                        a.status.includes('Pre-') || a.status.includes('Proposed') ? 'bg-amber-100 text-amber-700' :
+                                        a.status.includes('Grant') ? 'bg-teal-100 text-teal-700' :
+                                        'bg-slate-100 text-slate-600'
+                                    }">${a.status}</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-xs font-semibold">${a.passings}</span>
+                                    <br><a href="${a.sourceUrl}" target="_blank" class="text-[10px] text-blue-500 underline">${a.source}</a>
+                                </div>
+                            </div>`).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Methodology note -->
+                    <div class="bg-amber-50 rounded-lg p-2.5 border border-amber-200">
+                        <p class="text-[10px] font-semibold text-amber-700 mb-1">METHODOLOGY</p>
+                        <p class="text-[10px] text-amber-600 leading-relaxed">${op.methodology}</p>
+                    </div>
+
+                    <!-- Analysis note -->
+                    <div class="bg-slate-50 rounded-lg p-2.5">
+                        <p class="text-[10px] text-slate-600 leading-relaxed">${op.incrementalNote}</p>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    populateIncrementalAnalysis();
+
+    // ================================================================
+    // SOURCE MODALS
+    // ================================================================
+    function showSourcesModal() {
+        const sources = new Set();
+        MARKETS.forEach(m => { if (m.sourceUrl) sources.add(JSON.stringify({ name: m.source, url: m.sourceUrl })); });
+        BUILD_PIPELINE.forEach(b => { if (b.sourceUrl) sources.add(JSON.stringify({ name: b.source, url: b.sourceUrl })); });
+        OPERATOR_PROFILES.forEach(op => {
+            op.metrics.forEach(m => { if (m.sourceUrl) sources.add(JSON.stringify({ name: m.source, url: m.sourceUrl })); });
+        });
+        Object.values(CENSUS_TRACTS).forEach(area => {
+            area.tracts.forEach(t => { if (t.sourceUrl) sources.add(JSON.stringify({ name: t.sourceType, url: t.sourceUrl })); });
+        });
+        if (typeof FCC_INCREMENTAL !== 'undefined') {
+            FCC_INCREMENTAL.forEach(op => {
+                sources.add(JSON.stringify({ name: op.fccBDCSource, url: op.fccBDCUrl }));
+                op.announcedAdditional.forEach(a => { if (a.sourceUrl) sources.add(JSON.stringify({ name: a.source, url: a.sourceUrl })); });
+            });
+        }
+
+        const body = document.getElementById('sourcesModalBody');
+        body.innerHTML = `<p class="text-slate-600 mb-3">All ${sources.size} unique source URLs used in this tool:</p>` +
+            Array.from(sources).map(s => {
+                const src = JSON.parse(s);
+                return `<a href="${src.url}" target="_blank" class="block text-blue-600 underline hover:text-blue-800 text-xs truncate">[${src.name}] ${src.url}</a>`;
+            }).join('');
+        document.getElementById('sourcesModal').classList.remove('hidden');
+    }
+
+    function closeSourcesModal() {
+        document.getElementById('sourcesModal').classList.add('hidden');
+    }
+
+    // ================================================================
+    // FCC BDC COVERAGE LAYER (Block Group Level)
+    // ================================================================
+    let bdcLayerActive = false;
+    let bdcGeoJsonLayer = null;
+    let bdcCurrentState = 'all';
+
+    function getBDCFillColor(bsls) {
+        // Teal gradient matching GoNetSpeed brand
+        if (bsls >= 500) return '#0D9488';
+        if (bsls >= 200) return '#14B8A6';
+        if (bsls >= 100) return '#2DD4BF';
+        if (bsls >= 50) return '#5EEAD4';
+        if (bsls >= 20) return '#99F6E4';
+        return '#CCFBF1';
+    }
+
+    function getBDCFillOpacity(bsls) {
+        if (bsls >= 500) return 0.55;
+        if (bsls >= 200) return 0.45;
+        if (bsls >= 100) return 0.35;
+        if (bsls >= 50) return 0.28;
+        return 0.2;
+    }
+
+    function buildBDCPopup(props) {
+        const fccVerifyUrl = `https://broadbandmap.fcc.gov/provider-detail/fixed?version=jun2025&providers=131378_50_on&zoom=13&speed=0_0`;
+        return `
+            <div style="font-family:Inter,-apple-system,sans-serif;min-width:260px;">
+                <div style="background:#0D9488;color:white;padding:8px 12px;margin:-12px -16px 10px;border-radius:8px 8px 0 0;">
+                    <div style="font-size:11px;opacity:0.8;">FCC BDC Coverage &middot; Block Group</div>
+                    <div style="font-weight:700;font-size:14px;">${props.county}, ${props.state}</div>
+                    <div style="font-size:10px;opacity:0.7;">GEOID: ${props.id}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                    <div style="background:#F0FDFA;padding:6px 8px;border-radius:6px;border-left:3px solid #0D9488;">
+                        <div style="font-size:10px;color:#0F766E;">BSLs Filed</div>
+                        <div style="font-weight:700;font-size:16px;color:#134E4A;">${props.bsls.toLocaleString()}</div>
+                    </div>
+                    <div style="background:#F0FDFA;padding:6px 8px;border-radius:6px;border-left:3px solid #14B8A6;">
+                        <div style="font-size:10px;color:#0F766E;">Census HUs</div>
+                        <div style="font-weight:700;font-size:16px;color:#134E4A;">${props.hu100 ? props.hu100.toLocaleString() : 'N/A'}</div>
+                    </div>
+                </div>
+                ${props.coveragePct > 0 ? `
+                <div style="margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748B;margin-bottom:2px;">
+                        <span>BSL / Housing Unit Coverage</span>
+                        <span style="font-weight:600;color:#0D9488;">${props.coveragePct}%</span>
+                    </div>
+                    <div style="background:#E2E8F0;border-radius:4px;height:6px;overflow:hidden;">
+                        <div style="background:linear-gradient(90deg,#14B8A6,#0D9488);height:100%;width:${Math.min(props.coveragePct, 100)}%;border-radius:4px;"></div>
+                    </div>
+                </div>` : ''}
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;margin-bottom:8px;">
+                    <div style="text-align:center;background:#F8FAFC;padding:4px;border-radius:4px;">
+                        <div style="color:#64748B;">Blocks</div>
+                        <div style="font-weight:600;">${props.blocks}</div>
+                    </div>
+                    <div style="text-align:center;background:#F8FAFC;padding:4px;border-radius:4px;">
+                        <div style="color:#64748B;">Population</div>
+                        <div style="font-weight:600;">${props.pop100 ? props.pop100.toLocaleString() : 'N/A'}</div>
+                    </div>
+                    <div style="text-align:center;background:#F8FAFC;padding:4px;border-radius:4px;">
+                        <div style="color:#64748B;">Area (km&sup2;)</div>
+                        <div style="font-weight:600;">${props.areaLandSqKm}</div>
+                    </div>
+                </div>
+                <div style="font-size:10px;color:#64748B;border-top:1px dashed #E2E8F0;padding-top:6px;">
+                    <div><b>Provider:</b> GoNetSpeed (Future Fiber FinCo)</div>
+                    <div><b>Technology:</b> FTTP (1000/1000 Mbps)</div>
+                    <div><b>Filing:</b> Jun 2025 (pub. Feb 3, 2026)</div>
+                </div>
+                <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #E2E8F0;">
+                    <a href="${fccVerifyUrl}" target="_blank" style="font-size:10px;color:#2563EB;text-decoration:underline;font-weight:600;">
+                        Verify on FCC Broadband Map
+                    </a>
+                    <span style="font-size:9px;color:#94A3B8;margin-left:4px;">
+                        | <a href="https://broadbandmap.fcc.gov/data-download/fixed" target="_blank" style="color:#94A3B8;text-decoration:underline;">Data Download</a>
+                    </span>
+                </div>
+            </div>`;
+    }
+
+    function renderBDCCoverage(stateFilter) {
+        bdcCoverageLayer.clearLayers();
+        if (typeof GONETSPEED_BDC_COVERAGE === 'undefined') return;
+
+        const data = stateFilter === 'all'
+            ? GONETSPEED_BDC_COVERAGE
+            : { type: 'FeatureCollection', features: GONETSPEED_BDC_COVERAGE.features.filter(f => f.properties.state === stateFilter) };
+
+        bdcGeoJsonLayer = L.geoJSON(data, {
+            style: function(feature) {
+                const bsls = feature.properties.bsls;
+                return {
+                    color: '#0D9488',
+                    fillColor: getBDCFillColor(bsls),
+                    fillOpacity: getBDCFillOpacity(bsls),
+                    weight: 0.5,
+                    opacity: 0.6,
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                layer.bindPopup(buildBDCPopup(feature.properties), { maxWidth: 340 });
+                layer.on('mouseover', function() {
+                    this.setStyle({ weight: 2, opacity: 1, fillOpacity: getBDCFillOpacity(feature.properties.bsls) + 0.15 });
+                });
+                layer.on('mouseout', function() {
+                    bdcGeoJsonLayer.resetStyle(this);
+                });
+            }
+        });
+
+        bdcCoverageLayer.addLayer(bdcGeoJsonLayer);
+
+        // Update stats
+        const features = data.features;
+        const totalBSLs = features.reduce((sum, f) => sum + f.properties.bsls, 0);
+        const states = new Set(features.map(f => f.properties.state));
+        document.getElementById('bdcStats').textContent =
+            `${features.length.toLocaleString()} block groups | ${totalBSLs.toLocaleString()} BSLs | ${states.size} state${states.size > 1 ? 's' : ''}`;
+    }
+
+    function toggleBDCCoverage() {
+        bdcLayerActive = !bdcLayerActive;
+        const btn = document.getElementById('bdcToggle');
+        const stateFilter = document.getElementById('bdcStateFilter');
+        const stats = document.getElementById('bdcStats');
+
+        if (bdcLayerActive) {
+            btn.style.background = '#0D9488';
+            btn.style.color = 'white';
+            stateFilter.classList.remove('hidden');
+            stats.classList.remove('hidden');
+            renderBDCCoverage(bdcCurrentState);
+            map.addLayer(bdcCoverageLayer);
+        } else {
+            btn.style.background = '#E2E8F0';
+            btn.style.color = '#475569';
+            stateFilter.classList.add('hidden');
+            stats.classList.add('hidden');
+            map.removeLayer(bdcCoverageLayer);
+        }
+    }
+
+    function filterBDCByState() {
+        bdcCurrentState = document.getElementById('bdcStateFilter').value;
+        renderBDCCoverage(bdcCurrentState);
+
+        // Fly to state
+        const stateCoords = {
+            CT: [41.6, -72.7, 9],
+            ME: [44.0, -69.5, 8],
+            MA: [42.3, -72.6, 10],
+            NY: [42.8, -76.8, 8],
+            PA: [40.5, -80.0, 10],
+            VT: [43.6, -73.0, 10],
+        };
+        if (bdcCurrentState !== 'all' && stateCoords[bdcCurrentState]) {
+            const [lat, lon, zoom] = stateCoords[bdcCurrentState];
+            map.flyTo([lat, lon], zoom, { duration: 1.5 });
+        } else {
+            map.flyTo([42.2, -74.5], 7, { duration: 1.5 });
+        }
+    }
+
+    // ================================================================
+    // LOAD ALL TRACTS ON START (for demo)
+    // ================================================================
+    // Auto-load ALL census tracts on startup for full regional view
+    setTimeout(() => loadAllTracts(), 500);
+    </script>
+</body>
+</html>

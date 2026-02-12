@@ -1,0 +1,294 @@
+{
+  "provider": "GoNetSpeed (Future Fiber FinCo, LLC)",
+  "providerId": 131378,
+  "filing": "Jun 2025 (published Feb 3, 2026)",
+  "technology": "Fiber to the Premises (50)",
+  "speeds": "1000/1000 Mbps",
+  "totalBSLs": 481632,
+  "totalBlockGroups": 1790,
+  "states": {
+    "CT": {
+      "bsls": 266189,
+      "blockGroups": 982,
+      "counties": [
+        "Fairfield",
+        "Hartford",
+        "Litchfield",
+        "Middlesex",
+        "New Haven",
+        "Tolland"
+      ]
+    },
+    "ME": {
+      "bsls": 112243,
+      "blockGroups": 436,
+      "counties": [
+        "Androscoggin",
+        "Cumberland",
+        "Franklin",
+        "Hancock",
+        "Kennebec",
+        "Knox",
+        "Penobscot",
+        "Piscataquis",
+        "Sagadahoc",
+        "Somerset",
+        "Waldo",
+        "York"
+      ]
+    },
+    "MA": {
+      "bsls": 14055,
+      "blockGroups": 65,
+      "counties": [
+        "Berkshire",
+        "Franklin",
+        "Hampden",
+        "Hampshire"
+      ]
+    },
+    "NY": {
+      "bsls": 69131,
+      "blockGroups": 236,
+      "counties": [
+        "Erie",
+        "Herkimer",
+        "Niagara",
+        "Oneida",
+        "Ontario",
+        "Schuyler",
+        "Seneca",
+        "Tompkins",
+        "Wayne"
+      ]
+    },
+    "PA": {
+      "bsls": 16138,
+      "blockGroups": 61,
+      "counties": [
+        "Allegheny",
+        "Beaver"
+      ]
+    },
+    "VT": {
+      "bsls": 3876,
+      "blockGroups": 10,
+      "counties": [
+        "Addison",
+        "Rutland"
+      ]
+    }
+  },
+  "topCounties": [
+    {
+      "fips": "09003",
+      "bsls": 120586,
+      "blockGroups": 433,
+      "state": "CT",
+      "name": "Hartford"
+    },
+    {
+      "fips": "09009",
+      "bsls": 77005,
+      "blockGroups": 288,
+      "state": "CT",
+      "name": "New Haven"
+    },
+    {
+      "fips": "09001",
+      "bsls": 43104,
+      "blockGroups": 164,
+      "state": "CT",
+      "name": "Fairfield"
+    },
+    {
+      "fips": "23005",
+      "bsls": 38969,
+      "blockGroups": 139,
+      "state": "ME",
+      "name": "Cumberland"
+    },
+    {
+      "fips": "23031",
+      "bsls": 24807,
+      "blockGroups": 74,
+      "state": "ME",
+      "name": "York"
+    },
+    {
+      "fips": "36029",
+      "bsls": 24265,
+      "blockGroups": 76,
+      "state": "NY",
+      "name": "Erie"
+    },
+    {
+      "fips": "23019",
+      "bsls": 17305,
+      "blockGroups": 75,
+      "state": "ME",
+      "name": "Penobscot"
+    },
+    {
+      "fips": "42007",
+      "bsls": 15896,
+      "blockGroups": 58,
+      "state": "PA",
+      "name": "Beaver"
+    },
+    {
+      "fips": "09007",
+      "bsls": 13277,
+      "blockGroups": 40,
+      "state": "CT",
+      "name": "Middlesex"
+    },
+    {
+      "fips": "36069",
+      "bsls": 12907,
+      "blockGroups": 47,
+      "state": "NY",
+      "name": "Ontario"
+    },
+    {
+      "fips": "23011",
+      "bsls": 11153,
+      "blockGroups": 49,
+      "state": "ME",
+      "name": "Kennebec"
+    },
+    {
+      "fips": "23001",
+      "bsls": 10813,
+      "blockGroups": 51,
+      "state": "ME",
+      "name": "Androscoggin"
+    },
+    {
+      "fips": "36065",
+      "bsls": 8360,
+      "blockGroups": 36,
+      "state": "NY",
+      "name": "Oneida"
+    },
+    {
+      "fips": "36099",
+      "bsls": 8270,
+      "blockGroups": 26,
+      "state": "NY",
+      "name": "Seneca"
+    },
+    {
+      "fips": "09005",
+      "bsls": 7485,
+      "blockGroups": 34,
+      "state": "CT",
+      "name": "Litchfield"
+    },
+    {
+      "fips": "36063",
+      "bsls": 7285,
+      "blockGroups": 23,
+      "state": "NY",
+      "name": "Niagara"
+    },
+    {
+      "fips": "25013",
+      "bsls": 6937,
+      "blockGroups": 26,
+      "state": "MA",
+      "name": "Hampden"
+    },
+    {
+      "fips": "25015",
+      "bsls": 6368,
+      "blockGroups": 32,
+      "state": "MA",
+      "name": "Hampshire"
+    },
+    {
+      "fips": "36117",
+      "bsls": 4982,
+      "blockGroups": 18,
+      "state": "NY",
+      "name": "Wayne"
+    },
+    {
+      "fips": "09013",
+      "bsls": 4732,
+      "blockGroups": 23,
+      "state": "CT",
+      "name": "Tolland"
+    },
+    {
+      "fips": "23013",
+      "bsls": 4491,
+      "blockGroups": 18,
+      "state": "ME",
+      "name": "Knox"
+    },
+    {
+      "fips": "23023",
+      "bsls": 4308,
+      "blockGroups": 15,
+      "state": "ME",
+      "name": "Sagadahoc"
+    },
+    {
+      "fips": "36109",
+      "bsls": 2020,
+      "blockGroups": 6,
+      "state": "NY",
+      "name": "Tompkins"
+    },
+    {
+      "fips": "50001",
+      "bsls": 1963,
+      "blockGroups": 5,
+      "state": "VT",
+      "name": "Addison"
+    },
+    {
+      "fips": "50021",
+      "bsls": 1913,
+      "blockGroups": 5,
+      "state": "VT",
+      "name": "Rutland"
+    },
+    {
+      "fips": "36097",
+      "bsls": 855,
+      "blockGroups": 3,
+      "state": "NY",
+      "name": "Schuyler"
+    },
+    {
+      "fips": "25003",
+      "bsls": 584,
+      "blockGroups": 4,
+      "state": "MA",
+      "name": "Berkshire"
+    },
+    {
+      "fips": "23025",
+      "bsls": 266,
+      "blockGroups": 5,
+      "state": "ME",
+      "name": "Somerset"
+    },
+    {
+      "fips": "42003",
+      "bsls": 242,
+      "blockGroups": 3,
+      "state": "PA",
+      "name": "Allegheny"
+    },
+    {
+      "fips": "36043",
+      "bsls": 187,
+      "blockGroups": 1,
+      "state": "NY",
+      "name": "Herkimer"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Raw FCC BDC data files (large CSVs and ZIPs)
+fcc_data/*.csv
+fcc_data/*.zip
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
