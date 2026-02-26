@@ -1106,6 +1106,35 @@
         fidium: { name: 'Fidium', short: 'FDM', color: '#6366F1', sponsor: 'Searchlight' },
     };
 
+    // Track which provider is selected for the "Provider Overlap" card
+    let selectedOverlapProvider = 'gonetspeed';
+
+    function updateProviderOverlapCard() {
+        const ov = window.BDC_OVERLAPS;
+        if (!ov || !ov.computed) return;
+        const exposure = ov.byProviderExposure[selectedOverlapProvider] || { overlapBGs: 0, overlapBSLs: 0, totalBGs: 0, totalBSLs: 0 };
+        const el = ENTITY_LABELS[selectedOverlapProvider] || { name: selectedOverlapProvider, color: '#6B7280' };
+        const pct = exposure.totalBGs > 0 ? ((exposure.overlapBGs / exposure.totalBGs) * 100).toFixed(1) : '0.0';
+        document.getElementById('providerOverlapBGs').textContent = exposure.overlapBGs.toLocaleString();
+        document.getElementById('providerOverlapBSLs').textContent = exposure.overlapBSLs.toLocaleString() + ' BSLs in overlap (' + pct + '% of footprint)';
+        document.getElementById('providerOverlapDot').style.background = el.color;
+    }
+
+    function cycleOverlapProvider() {
+        const keys = Object.keys(ENTITY_LABELS);
+        const idx = keys.indexOf(selectedOverlapProvider);
+        selectedOverlapProvider = keys[(idx + 1) % keys.length];
+        // Update the dropdown display
+        const sel = document.getElementById('providerOverlapSelect');
+        if (sel) sel.value = selectedOverlapProvider;
+        updateProviderOverlapCard();
+    }
+
+    function onProviderOverlapChange(val) {
+        selectedOverlapProvider = val;
+        updateProviderOverlapCard();
+    }
+
     function renderOverlapTab() {
         const ov = window.BDC_OVERLAPS;
         if (!ov || !ov.computed) {
@@ -1119,8 +1148,18 @@
             bg.providers.forEach(v => { if (v.bsls > maxBsl) maxBsl = v.bsls; });
             return sum + maxBsl;
         }, 0);
-        const gnsExposure = ov.byProviderExposure.gonetspeed || { overlapBGs: 0, overlapBSLs: 0 };
         const stateCount = Object.keys(ov.byState).length;
+
+        // Build provider select options
+        const providerOptions = Object.entries(ENTITY_LABELS).map(([key, lbl]) => {
+            const sel = key === selectedOverlapProvider ? 'selected' : '';
+            return '<option value="' + key + '" ' + sel + '>' + lbl.name + '</option>';
+        }).join('');
+
+        // Get initial provider exposure data
+        const initExposure = ov.byProviderExposure[selectedOverlapProvider] || { overlapBGs: 0, overlapBSLs: 0, totalBGs: 0, totalBSLs: 0 };
+        const initLabel = ENTITY_LABELS[selectedOverlapProvider] || { name: selectedOverlapProvider, color: '#6B7280' };
+        const initPct = initExposure.totalBGs > 0 ? ((initExposure.overlapBGs / initExposure.totalBGs) * 100).toFixed(1) : '0.0';
 
         document.getElementById('overlapSummary').innerHTML = `
             <div class="bg-white/10 rounded-lg p-3">
@@ -1133,10 +1172,18 @@
                 <p class="font-bold text-2xl">${totalBSLs.toLocaleString()}</p>
                 <p class="text-purple-300 text-[10px]">Max footprint in overlap BGs</p>
             </div>
-            <div class="bg-white/10 rounded-lg p-3 border border-white/20">
-                <p class="text-yellow-200 text-[10px] mb-1">Oak Hill Exposed (GNS)</p>
-                <p class="font-bold text-2xl text-yellow-300">${gnsExposure.overlapBGs.toLocaleString()}</p>
-                <p class="text-yellow-200/70 text-[10px]">${gnsExposure.overlapBSLs.toLocaleString()} BSLs in overlap</p>
+            <div class="bg-white/10 rounded-lg p-3 border border-white/20 cursor-pointer" onclick="cycleOverlapProvider()">
+                <div class="flex items-center gap-1.5 mb-1">
+                    <span id="providerOverlapDot" class="w-2.5 h-2.5 rounded-full" style="background:${initLabel.color}"></span>
+                    <select id="providerOverlapSelect" onchange="onProviderOverlapChange(this.value); event.stopPropagation();"
+                        class="bg-transparent text-white text-[10px] font-semibold border-none outline-none cursor-pointer appearance-none" style="background:transparent;">
+                        ${providerOptions}
+                    </select>
+                    <span class="text-purple-300 text-[10px]">&#x25BC;</span>
+                </div>
+                <p class="text-[10px] text-purple-200 mb-0.5">Block Overlap With Others</p>
+                <p id="providerOverlapBGs" class="font-bold text-2xl">${initExposure.overlapBGs.toLocaleString()}</p>
+                <p id="providerOverlapBSLs" class="text-purple-200/70 text-[10px]">${initExposure.overlapBSLs.toLocaleString()} BSLs in overlap (${initPct}% of footprint)</p>
             </div>
             <div class="bg-white/10 rounded-lg p-3">
                 <p class="text-purple-200 text-[10px] mb-1">States with Overlap</p>
@@ -1153,13 +1200,11 @@
                 const l2 = ENTITY_LABELS[e2] || { name: e2, color: '#6B7280' };
                 const risk = data.bsls > 100000 ? 'HIGH' : data.bsls > 10000 ? 'Medium' : 'Low';
                 const states = Array.from(data.states).join(', ');
-                const isOakHill = e1 === 'gonetspeed' || e2 === 'gonetspeed';
-                return `<tr class="border-b border-slate-100 hover:bg-slate-50/50 ${isOakHill ? 'bg-yellow-50/50' : ''}">
+                return `<tr class="border-b border-slate-100 hover:bg-slate-50/50">
                     <td class="py-2.5 px-3">
                         <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${l1.color}"></span><span class="font-medium">${l1.name}</span></span>
                         <span class="text-slate-400 mx-1">vs</span>
                         <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${l2.color}"></span><span class="font-medium">${l2.name}</span></span>
-                        ${isOakHill ? '<span class="ml-1 px-1 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[9px] font-semibold">OAK HILL</span>' : ''}
                     </td>
                     <td class="py-2.5 px-3 text-right font-semibold">${data.bgs.toLocaleString()}</td>
                     <td class="py-2.5 px-3 text-right font-semibold">${data.bsls.toLocaleString()}</td>
