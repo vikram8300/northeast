@@ -84,6 +84,7 @@ function mapPopupHTML(market) {
         'Pending M&A': { bg: '#F3E8FF', text: '#6B21A8' },
         'Grant Awarded': { bg: '#CCFBF1', text: '#0F766E' },
         'Announced': { bg: '#FEF3C7', text: '#92400E' },
+        'BDC Overlap Zone': { bg: '#F5F3FF', text: '#6B21A8' },
     };
     const sc = statusColors[market.status] || { bg: '#F3F4F6', text: '#374151' };
 
@@ -104,7 +105,28 @@ function mapPopupHTML(market) {
 
     if (market.overlapWith && market.overlapWith.length > 0) {
         const overlapNames = market.overlapWith.map(id => PROVIDERS[id] ? PROVIDERS[id].name : id).join(', ');
-        html += `<div style="font-size: 11px; color: #DC2626; font-weight: 600; margin-bottom: 6px;">Overlap: ${overlapNames}</div>`;
+        html += `<div style="font-size: 11px; color: #DC2626; font-weight: 600; margin-bottom: 6px;">Fiber Overlap: ${overlapNames}</div>`;
+
+        // BDC Competitive View — lookup county-level overlap from computed data
+        if (typeof window !== 'undefined' && window.BDC_OVERLAPS && window.BDC_OVERLAPS.computed) {
+            const ov = window.BDC_OVERLAPS;
+            // Find matching county from byCounty (match state abbreviation + approximate county)
+            const stateMap = { 'CT': 'CT', 'ME': 'ME', 'NH': 'NH', 'NY': 'NY', 'PA': 'PA', 'MA': 'MA', 'VT': 'VT', 'RI': 'RI', 'MD': 'MD', 'NJ': 'NJ', 'WV': 'WV' };
+            const marketState = market.name.split(', ').pop().trim();
+            const st = stateMap[marketState] || marketState;
+            // Find counties in this state with overlap
+            const stateCounties = Object.entries(ov.byCounty).filter(([k]) => k.startsWith(st + '-'));
+            if (stateCounties.length > 0) {
+                const totalBGs = stateCounties.reduce((s, [, d]) => s + d.bgs, 0);
+                const totalBSLs = stateCounties.reduce((s, [, d]) => s + d.bsls, 0);
+                html += `<div style="background:#F5F3FF;border-left:3px solid #7C3AED;padding:6px 8px;border-radius:4px;margin-bottom:6px;">
+                    <div style="font-size:10px;font-weight:700;color:#6B21A8;margin-bottom:3px;">FCC BDC Competitive View (${st})</div>
+                    <div style="font-size:10px;color:#475569;">${totalBGs.toLocaleString()} block groups with 2+ fiber providers</div>
+                    <div style="font-size:10px;color:#475569;">${totalBSLs.toLocaleString()} contested BSLs across ${stateCounties.length} counties</div>
+                    <div style="font-size:9px;color:#94A3B8;margin-top:2px;">Source: FCC BDC Jun 2025 | Toggle "Fiber Overlap" on map</div>
+                </div>`;
+            }
+        }
     }
 
     html += `<div style="border-top: 1px solid #E2E8F0; padding-top: 6px; margin-top: 4px;">

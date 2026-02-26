@@ -154,6 +154,9 @@
                     // Re-merge VZ+Frontier data now that scripts are loaded
                     if (typeof _refreshVzFrontierData === 'function') _refreshVzFrontierData();
                     renderAllBDC();
+                    // Compute fiber-on-fiber overlaps and populate the overlap tab
+                    if (typeof computeBDCOverlaps === 'function') computeBDCOverlaps();
+                    if (typeof renderOverlapTab === 'function') renderOverlapTab();
                 }
             };
             document.head.appendChild(s);
@@ -211,6 +214,10 @@
                                 </button>
                                 <button id="bdcToggle_fidium" onclick="toggleBDCProvider('fidium')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#6366F1;color:white;">
                                     Fidium
+                                </button>
+                                <span class="text-slate-300 mx-0.5">|</span>
+                                <button id="bdcToggle_overlap" onclick="toggleOverlapLayer()" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#E2E8F0;color:#475569;">
+                                    Fiber Overlap
                                 </button>
                                 <select id="bdcStateFilter" onchange="filterBDCByState()" class="text-xs rounded-lg border border-slate-200 px-2 py-1.5 bg-white">
                                     <option value="all">All States</option>
@@ -409,9 +416,73 @@
 
         <!-- ========== TAB 4: OVERLAP ANALYSIS ========== -->
         <div id="tab-overlap" class="tab-content">
+            <!-- Section 1: BDC Fiber-on-Fiber Summary -->
+            <div class="bg-gradient-to-r from-purple-900 via-purple-800 to-red-900 rounded-xl p-4 mt-4 text-white">
+                <div class="flex items-center gap-2 mb-3">
+                    <h2 class="font-bold text-lg">Fiber-on-Fiber Overlap (FCC BDC)</h2>
+                    <span class="px-2 py-0.5 bg-white/20 rounded text-[10px] font-medium">COMPUTED FROM BDC DATA</span>
+                </div>
+                <p class="text-purple-200 text-xs mb-4">Block groups where 2+ fiber providers have filed FTTP coverage in FCC BDC (Jun 2025). Competitive entities: GoNetSpeed, Verizon/Frontier (combined), Fidium.</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="overlapSummary">
+                    <div class="bg-white/10 rounded-lg p-3">
+                        <p class="text-purple-200 text-[10px]">Loading BDC data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Provider-Pair Breakdown -->
             <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
-                <h2 class="font-bold text-lg text-slate-800 mb-4">Market Overlap Matrix</h2>
-                <p class="text-xs text-slate-500 mb-4">Each dot shows operator presence. Purple = contested overlap zone.</p>
+                <h2 class="font-bold text-lg text-slate-800 mb-2">Provider-Pair Competitive Overlap</h2>
+                <p class="text-xs text-slate-500 mb-4">Block groups where each pair of fiber providers both claim FTTP coverage. Contested BSLs = max footprint in shared BGs.</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="border-b text-left text-slate-500">
+                                <th class="pb-2 px-3">Provider Pair</th>
+                                <th class="pb-2 px-3 text-right">Overlap BGs</th>
+                                <th class="pb-2 px-3 text-right">Contested BSLs</th>
+                                <th class="pb-2 px-3">States</th>
+                                <th class="pb-2 px-3">Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pairOverlapTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 3: State-Level BDC Overlap Heat Map -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <h2 class="font-bold text-lg text-slate-800 mb-2">State-Level Fiber Overlap Heat Map</h2>
+                <p class="text-xs text-slate-500 mb-4">Click a state to see county-level breakdown below.</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="stateHeatMap"></div>
+            </div>
+
+            <!-- Section 4: County Drilldown (shown on state click) -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4 hidden" id="countyDrilldown">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="font-bold text-lg text-slate-800" id="countyDrilldownTitle">County Breakdown</h2>
+                    <button onclick="document.getElementById('countyDrilldown').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-sm">&times; Close</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="border-b text-left text-slate-500">
+                                <th class="pb-2 px-3">County</th>
+                                <th class="pb-2 px-3 text-right">Overlap BGs</th>
+                                <th class="pb-2 px-3 text-right">Contested BSLs</th>
+                                <th class="pb-2 px-3">Providers</th>
+                                <th class="pb-2 px-3">Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody id="countyDrilldownTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 5: Market Overlap Matrix (existing, kept) -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
+                <h2 class="font-bold text-lg text-slate-800 mb-2">Market Overlap Matrix (Press / Announcements)</h2>
+                <p class="text-xs text-slate-500 mb-4">Each dot shows operator presence based on press releases. Purple = contested overlap zone.</p>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs min-w-[1000px]">
                         <thead>
@@ -427,12 +498,8 @@
                     </table>
                 </div>
             </div>
-            <!-- State Heat Map -->
-            <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
-                <h2 class="font-bold text-lg text-slate-800 mb-4">State-Level Overlap Heat Map</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="stateHeatMap"></div>
-            </div>
-            <!-- FCC BDC Incremental Analysis -->
+
+            <!-- Section 6: FCC BDC Incremental Analysis -->
             <div class="bg-white rounded-xl shadow-sm p-4 mt-4">
                 <div class="flex items-center gap-2 mb-4">
                     <h2 class="font-bold text-lg text-slate-800">FCC BDC vs. Announced Builds</h2>
@@ -488,7 +555,9 @@
         gonetspeed: L.layerGroup().addTo(map),
         verizon_frontier: L.layerGroup().addTo(map),
         fidium: L.layerGroup().addTo(map),
+        overlap: L.layerGroup(), // NOT added to map by default — toggled on
     };
+    let overlapLayerActive = false;
 
     // Stats
     let stats = { oakHillPassings: 0, fidiumPassings: 0, overlapCount: 0, totalBuildCost: 0, totalPassings: 0, loadedTracts: 0 };
@@ -759,6 +828,18 @@
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:#475569;font-style:italic;">${tract.notes}</div>
                 ${tract.fccProviders && tract.fccProviders.length ? `
+                ${(() => {
+                    const fiberCount = tract.fccProviders.filter(p => p.tech === 'Fiber').length;
+                    if (fiberCount >= 2) {
+                        const label = fiberCount >= 3 ? 'Highly Contested' : 'Fiber-on-Fiber Competition';
+                        const badgeColor = fiberCount >= 3 ? '#DC2626' : '#7C3AED';
+                        return `<div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:${badgeColor}11;border:1px solid ${badgeColor}33;display:flex;align-items:center;gap:6px;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${badgeColor};display:inline-block;"></span>
+                            <span style="font-size:11px;font-weight:700;color:${badgeColor};">${label}: ${fiberCount} fiber providers in this tract</span>
+                        </div>`;
+                    }
+                    return '';
+                })()}
                 <div style="margin-top:10px;padding-top:8px;border-top:2px solid #3B82F6;">
                     <div style="font-size:11px;font-weight:700;color:#1E40AF;margin-bottom:6px;">FCC BDC Provider Filings</div>
                     <table style="width:100%;border-collapse:collapse;font-size:10px;">
@@ -1016,24 +1097,126 @@
     }
     populateOverlapMatrix();
 
-    // State heat map
-    const stateRisks = [
-        { state: 'CT', risk: 'VERY HIGH', color: '#991B1B', bg: '#FEE2E2', note: 'GoNetSpeed 65+ towns vs Frontier 111 communities. 4-way.' },
-        { state: 'ME', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'GoNetSpeed + Fidium + Breezeline triple overlap in south.' },
-        { state: 'NH', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'Fidium 276K+ vs Breezeline 9 towns.' },
-        { state: 'PA', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: 'Scranton: Empire vs Greenlight/Loop. Williamsport: Empire vs FastBridge.' },
-        { state: 'NY (Albany)', risk: 'HIGH', color: '#B91C1C', bg: '#FEE2E2', note: '3-way: GoNetSpeed + Greenlight + Fidium.' },
-        { state: 'NY (Rochester)', risk: 'LOW', color: '#15803D', bg: '#DCFCE7', note: 'Greenlight HQ. Spectrum only competitor.' },
-        { state: 'NY (Buffalo)', risk: 'LOW', color: '#15803D', bg: '#DCFCE7', note: 'Greenlight expanding aggressively. 28K+ passed.' },
-        { state: 'MD', risk: 'MEDIUM', color: '#92400E', bg: '#FEF3C7', note: 'Greenlight $100M Baltimore greenfield. Comcast + Fios.' },
-    ];
-    document.getElementById('stateHeatMap').innerHTML = stateRisks.map(s => `
-        <div class="rounded-lg p-3" style="background:${s.bg}">
-            <p class="font-bold text-sm" style="color:${s.color}">${s.state}</p>
-            <p class="text-xs font-semibold mb-1" style="color:${s.color}">${s.risk}</p>
-            <p class="text-[10px]" style="color:${s.color}80">${s.note}</p>
-        </div>
-    `).join('');
+    // ================================================================
+    // OVERLAP TAB RENDERING (BDC-computed)
+    // ================================================================
+    const ENTITY_LABELS = {
+        gonetspeed: { name: 'GoNetSpeed', short: 'GNS', color: '#0D9488', sponsor: 'Oak Hill' },
+        verizon_frontier: { name: 'Verizon/Frontier', short: 'VZ/FR', color: '#DC2626', sponsor: 'Public' },
+        fidium: { name: 'Fidium', short: 'FDM', color: '#6366F1', sponsor: 'Searchlight' },
+    };
+
+    function renderOverlapTab() {
+        const ov = window.BDC_OVERLAPS;
+        if (!ov || !ov.computed) {
+            document.getElementById('overlapSummary').innerHTML = '<div class="bg-white/10 rounded-lg p-3 col-span-4"><p class="text-purple-200 text-xs">BDC data still loading...</p></div>';
+            return;
+        }
+
+        // Section 1: Summary cards
+        const totalBSLs = Object.values(ov.overlapBGs).reduce((sum, bg) => {
+            let maxBsl = 0;
+            bg.providers.forEach(v => { if (v.bsls > maxBsl) maxBsl = v.bsls; });
+            return sum + maxBsl;
+        }, 0);
+        const gnsExposure = ov.byProviderExposure.gonetspeed || { overlapBGs: 0, overlapBSLs: 0 };
+        const stateCount = Object.keys(ov.byState).length;
+
+        document.getElementById('overlapSummary').innerHTML = `
+            <div class="bg-white/10 rounded-lg p-3">
+                <p class="text-purple-200 text-[10px] mb-1">Total Overlap Block Groups</p>
+                <p class="font-bold text-2xl">${ov.totalOverlapBGs.toLocaleString()}</p>
+                <p class="text-purple-300 text-[10px]">2+ fiber providers</p>
+            </div>
+            <div class="bg-white/10 rounded-lg p-3">
+                <p class="text-purple-200 text-[10px] mb-1">Contested BSLs</p>
+                <p class="font-bold text-2xl">${totalBSLs.toLocaleString()}</p>
+                <p class="text-purple-300 text-[10px]">Max footprint in overlap BGs</p>
+            </div>
+            <div class="bg-white/10 rounded-lg p-3 border border-white/20">
+                <p class="text-yellow-200 text-[10px] mb-1">Oak Hill Exposed (GNS)</p>
+                <p class="font-bold text-2xl text-yellow-300">${gnsExposure.overlapBGs.toLocaleString()}</p>
+                <p class="text-yellow-200/70 text-[10px]">${gnsExposure.overlapBSLs.toLocaleString()} BSLs in overlap</p>
+            </div>
+            <div class="bg-white/10 rounded-lg p-3">
+                <p class="text-purple-200 text-[10px] mb-1">States with Overlap</p>
+                <p class="font-bold text-2xl">${stateCount}</p>
+                <p class="text-purple-300 text-[10px]">${Object.keys(ov.byState).join(', ')}</p>
+            </div>`;
+
+        // Section 2: Provider-pair table
+        const pairRows = Object.entries(ov.byPair)
+            .sort((a, b) => b[1].bsls - a[1].bsls)
+            .map(([pairKey, data]) => {
+                const [e1, e2] = pairKey.split('+');
+                const l1 = ENTITY_LABELS[e1] || { name: e1, color: '#6B7280' };
+                const l2 = ENTITY_LABELS[e2] || { name: e2, color: '#6B7280' };
+                const risk = data.bsls > 100000 ? 'HIGH' : data.bsls > 10000 ? 'Medium' : 'Low';
+                const states = Array.from(data.states).join(', ');
+                const isOakHill = e1 === 'gonetspeed' || e2 === 'gonetspeed';
+                return `<tr class="border-b border-slate-100 hover:bg-slate-50/50 ${isOakHill ? 'bg-yellow-50/50' : ''}">
+                    <td class="py-2.5 px-3">
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${l1.color}"></span><span class="font-medium">${l1.name}</span></span>
+                        <span class="text-slate-400 mx-1">vs</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${l2.color}"></span><span class="font-medium">${l2.name}</span></span>
+                        ${isOakHill ? '<span class="ml-1 px-1 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[9px] font-semibold">OAK HILL</span>' : ''}
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-semibold">${data.bgs.toLocaleString()}</td>
+                    <td class="py-2.5 px-3 text-right font-semibold">${data.bsls.toLocaleString()}</td>
+                    <td class="py-2.5 px-3 text-slate-500">${states}</td>
+                    <td class="py-2.5 px-3">${riskBadge(risk)}</td>
+                </tr>`;
+            }).join('');
+        document.getElementById('pairOverlapTable').innerHTML = pairRows;
+
+        // Section 3: State heat map (BDC-computed)
+        const stateCards = Object.entries(ov.byState)
+            .sort((a, b) => b[1].bsls - a[1].bsls)
+            .map(([st, data]) => {
+                const intensity = data.bgs > 500 ? { bg: '#FEE2E2', color: '#991B1B', risk: 'VERY HIGH' } :
+                                  data.bgs > 100 ? { bg: '#FEE2E2', color: '#B91C1C', risk: 'HIGH' } :
+                                  data.bgs > 20 ? { bg: '#FEF3C7', color: '#92400E', risk: 'MEDIUM' } :
+                                  { bg: '#DCFCE7', color: '#15803D', risk: 'LOW' };
+                const provLabels = Array.from(data.providers).map(e => (ENTITY_LABELS[e] || {}).short || e).join(', ');
+                return `<div class="rounded-lg p-3 cursor-pointer hover:ring-2 hover:ring-purple-400 transition-all" style="background:${intensity.bg}" onclick="showCountyDrilldown('${st}')">
+                    <p class="font-bold text-sm" style="color:${intensity.color}">${st}</p>
+                    <p class="text-xs font-semibold mb-1" style="color:${intensity.color}">${intensity.risk}</p>
+                    <p class="text-[10px]" style="color:${intensity.color}99">${data.bgs.toLocaleString()} BGs | ${data.bsls.toLocaleString()} BSLs</p>
+                    <p class="text-[10px]" style="color:${intensity.color}80">${provLabels} | ${data.counties.size} counties</p>
+                </div>`;
+            }).join('');
+        document.getElementById('stateHeatMap').innerHTML = stateCards;
+    }
+
+    // County drilldown
+    function showCountyDrilldown(state) {
+        const ov = window.BDC_OVERLAPS;
+        if (!ov) return;
+        const drilldown = document.getElementById('countyDrilldown');
+        drilldown.classList.remove('hidden');
+        document.getElementById('countyDrilldownTitle').textContent = state + ' — County Fiber Overlap Breakdown';
+
+        const counties = Object.entries(ov.byCounty)
+            .filter(([key]) => key.startsWith(state + '-'))
+            .sort((a, b) => b[1].bsls - a[1].bsls);
+
+        document.getElementById('countyDrilldownTable').innerHTML = counties.map(([key, data]) => {
+            const risk = data.bsls > 50000 ? 'HIGH' : data.bsls > 5000 ? 'Medium' : 'Low';
+            const provLabels = Array.from(data.providers).map(e => {
+                const l = ENTITY_LABELS[e];
+                return l ? `<span class="inline-flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full" style="background:${l.color}"></span>${l.short}</span>` : e;
+            }).join(' ');
+            return `<tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 font-medium">${data.county}</td>
+                <td class="py-2 px-3 text-right">${data.bgs.toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-semibold">${data.bsls.toLocaleString()}</td>
+                <td class="py-2 px-3">${provLabels}</td>
+                <td class="py-2 px-3">${riskBadge(risk)}</td>
+            </tr>`;
+        }).join('');
+
+        drilldown.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     // ================================================================
     // FCC BDC INCREMENTAL ANALYSIS
@@ -1161,6 +1344,123 @@
         bdcProviderConfig.gonetspeed.data = typeof GONETSPEED_BDC_COVERAGE !== 'undefined' ? GONETSPEED_BDC_COVERAGE : null;
         bdcProviderConfig.verizon_frontier.data = _buildVzFrontierData();
         bdcProviderConfig.fidium.data = typeof FIDIUM_BDC_COVERAGE !== 'undefined' ? FIDIUM_BDC_COVERAGE : null;
+    }
+
+    // ================================================================
+    // BDC OVERLAP COMPUTATION ENGINE
+    // Cross-references all BDC datasets to find fiber-on-fiber overlap
+    // ================================================================
+    function computeBDCOverlaps() {
+        const datasets = [
+            { key: 'gonetspeed', entity: 'gonetspeed', label: 'GoNetSpeed', global: 'GONETSPEED_BDC_COVERAGE' },
+            { key: 'verizon', entity: 'verizon_frontier', label: 'Verizon', global: 'VERIZON_BDC_COVERAGE' },
+            { key: 'frontier', entity: 'verizon_frontier', label: 'Frontier', global: 'FRONTIER_BDC_COVERAGE' },
+            { key: 'fidium', entity: 'fidium', label: 'Fidium', global: 'FIDIUM_BDC_COVERAGE' },
+        ];
+
+        // Build block group index: GEOID → { providers: Map<entity, {bsls, key, label}>, geometry, state, county }
+        const bgIndex = {};
+
+        datasets.forEach(ds => {
+            const data = window[ds.global];
+            if (!data || !data.features) return;
+            data.features.forEach(f => {
+                const id = f.properties.id;
+                if (!bgIndex[id]) {
+                    bgIndex[id] = {
+                        providers: new Map(),
+                        geometry: f.geometry,
+                        state: f.properties.state,
+                        county: f.properties.county,
+                        hu100: f.properties.hu100 || 0,
+                        pop100: f.properties.pop100 || 0,
+                    };
+                }
+                const bg = bgIndex[id];
+                // Merge by competitive entity (VZ+Frontier = one entity)
+                if (!bg.providers.has(ds.entity)) {
+                    bg.providers.set(ds.entity, { bsls: f.properties.bsls, key: ds.key, label: ds.label });
+                } else {
+                    // Same entity (e.g. verizon + frontier in same BG) — add BSLs
+                    const existing = bg.providers.get(ds.entity);
+                    existing.bsls += f.properties.bsls;
+                    existing.label = 'Verizon/Frontier';
+                }
+            });
+        });
+
+        // Filter to BGs with 2+ distinct competitive entities
+        const overlapBGs = {};
+        Object.entries(bgIndex).forEach(([id, bg]) => {
+            if (bg.providers.size >= 2) {
+                overlapBGs[id] = bg;
+            }
+        });
+
+        // Aggregation: byState
+        const byState = {};
+        Object.entries(overlapBGs).forEach(([id, bg]) => {
+            const st = bg.state;
+            if (!byState[st]) byState[st] = { bgs: 0, bsls: 0, providers: new Set(), counties: new Set() };
+            byState[st].bgs++;
+            bg.providers.forEach((v, k) => {
+                byState[st].bsls += v.bsls;
+                byState[st].providers.add(k);
+            });
+            byState[st].counties.add(bg.county);
+        });
+
+        // Aggregation: byCounty
+        const byCounty = {};
+        Object.entries(overlapBGs).forEach(([id, bg]) => {
+            const key = bg.state + '-' + bg.county;
+            if (!byCounty[key]) byCounty[key] = { state: bg.state, county: bg.county, bgs: 0, bsls: 0, providers: new Set() };
+            byCounty[key].bgs++;
+            bg.providers.forEach((v, k) => {
+                byCounty[key].bsls += v.bsls;
+                byCounty[key].providers.add(k);
+            });
+        });
+
+        // Aggregation: byPair
+        const byPair = {};
+        Object.entries(overlapBGs).forEach(([id, bg]) => {
+            const entities = Array.from(bg.providers.keys()).sort();
+            for (let i = 0; i < entities.length; i++) {
+                for (let j = i + 1; j < entities.length; j++) {
+                    const pairKey = entities[i] + '+' + entities[j];
+                    if (!byPair[pairKey]) byPair[pairKey] = { bgs: 0, bsls: 0, states: new Set() };
+                    byPair[pairKey].bgs++;
+                    const bslsA = bg.providers.get(entities[i]).bsls;
+                    const bslsB = bg.providers.get(entities[j]).bsls;
+                    byPair[pairKey].bsls += Math.max(bslsA, bslsB); // contested = max footprint
+                    byPair[pairKey].states.add(bg.state);
+                }
+            }
+        });
+
+        // Aggregation: byProviderExposure (Oak Hill focus)
+        const byProviderExposure = {};
+        datasets.forEach(ds => {
+            if (!byProviderExposure[ds.entity]) byProviderExposure[ds.entity] = { overlapBGs: 0, overlapBSLs: 0, totalBGs: 0, totalBSLs: 0 };
+        });
+        Object.entries(bgIndex).forEach(([id, bg]) => {
+            bg.providers.forEach((v, entity) => {
+                byProviderExposure[entity].totalBGs++;
+                byProviderExposure[entity].totalBSLs += v.bsls;
+                if (bg.providers.size >= 2) {
+                    byProviderExposure[entity].overlapBGs++;
+                    byProviderExposure[entity].overlapBSLs += v.bsls;
+                }
+            });
+        });
+
+        window.BDC_OVERLAPS = {
+            bgIndex, overlapBGs, byState, byCounty, byPair, byProviderExposure,
+            totalOverlapBGs: Object.keys(overlapBGs).length,
+            computed: true,
+        };
+        console.log('BDC_OVERLAPS computed:', window.BDC_OVERLAPS.totalOverlapBGs, 'overlap block groups');
     }
 
     const bdcProviderConfig = {
@@ -1403,6 +1703,10 @@
     function filterBDCByState() {
         bdcCurrentState = document.getElementById('bdcStateFilter').value;
         renderAllBDC();
+        // Also update overlap layer if active
+        if (overlapLayerActive) {
+            renderOverlapLayer(bdcCurrentState);
+        }
 
         const stateCoords = {
             CT: [41.6, -72.7, 9],
@@ -1419,6 +1723,130 @@
             map.flyTo([lat, lon], zoom, { duration: 1.5 });
         } else {
             map.flyTo([42.2, -74.5], 7, { duration: 1.5 });
+        }
+    }
+
+    // ================================================================
+    // BDC OVERLAP MAP LAYER (purple, dashed)
+    // ================================================================
+    function renderOverlapLayer(stateFilter) {
+        bdcLayers.overlap.clearLayers();
+        const ov = window.BDC_OVERLAPS;
+        if (!ov || !ov.computed) return;
+
+        const features = [];
+        Object.entries(ov.overlapBGs).forEach(([id, bg]) => {
+            if (stateFilter && stateFilter !== 'all' && bg.state !== stateFilter) return;
+            const provCount = bg.providers.size;
+            const totalBsls = Array.from(bg.providers.values()).reduce((s, v) => s + v.bsls, 0);
+            const provNames = Array.from(bg.providers.values()).map(v => v.label).join(', ');
+            features.push({
+                type: 'Feature',
+                geometry: bg.geometry,
+                properties: {
+                    id: id, state: bg.state, county: bg.county,
+                    provCount: provCount, totalBsls: totalBsls, provNames: provNames,
+                    hu100: bg.hu100, pop100: bg.pop100,
+                    _providers: Array.from(bg.providers.entries()).map(([k, v]) => ({ entity: k, ...v })),
+                },
+            });
+        });
+
+        if (features.length === 0) return;
+
+        const geoLayer = L.geoJSON({ type: 'FeatureCollection', features }, {
+            style: function(feature) {
+                const pc = feature.properties.provCount;
+                return {
+                    color: '#7C3AED',
+                    fillColor: pc >= 3 ? '#DC2626' : '#9333EA',
+                    fillOpacity: pc >= 3 ? 0.45 : 0.30,
+                    weight: 1.5,
+                    opacity: 0.8,
+                    dashArray: '5, 5',
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                layer.bindPopup(buildOverlapPopup(feature.properties), { maxWidth: 380 });
+                layer.on('mouseover', function() {
+                    this.setStyle({ weight: 3, opacity: 1, fillOpacity: 0.5 });
+                });
+                layer.on('mouseout', function() {
+                    geoLayer.resetStyle(this);
+                });
+            }
+        });
+
+        bdcLayers.overlap.addLayer(geoLayer);
+    }
+
+    function buildOverlapPopup(props) {
+        const providers = props._providers || [];
+        const provRows = providers.map(p => {
+            const l = ENTITY_LABELS[p.entity] || { name: p.label, color: '#6B7280' };
+            return `<tr class="border-b border-slate-100">
+                <td class="py-1.5 px-2"><span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${l.color}"></span>${p.label}</span></td>
+                <td class="py-1.5 px-2 text-right font-semibold">${p.bsls.toLocaleString()}</td>
+            </tr>`;
+        }).join('');
+
+        const assessment = props.provCount >= 3 ? 'Highly Contested' : 'Competitive';
+        const assessColor = props.provCount >= 3 ? '#DC2626' : '#7C3AED';
+
+        return `<div style="font-family:Inter,-apple-system,sans-serif;min-width:280px;">
+            <div style="background:linear-gradient(135deg,#7C3AED,#9333EA);color:white;padding:8px 12px;margin:-12px -16px 10px;border-radius:8px 8px 0 0;">
+                <div style="font-size:11px;opacity:0.8;">Fiber-on-Fiber Overlap Zone</div>
+                <div style="font-weight:700;font-size:14px;">${props.county}, ${props.state}</div>
+                <div style="font-size:10px;opacity:0.7;">GEOID: ${props.id} | ${props.provCount} fiber providers</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <div style="flex:1;background:#F5F3FF;padding:6px 8px;border-radius:6px;border-left:3px solid ${assessColor};">
+                    <div style="font-size:10px;color:#6B21A8;">Assessment</div>
+                    <div style="font-weight:700;font-size:13px;color:${assessColor};">${assessment}</div>
+                </div>
+                <div style="flex:1;background:#F5F3FF;padding:6px 8px;border-radius:6px;">
+                    <div style="font-size:10px;color:#6B21A8;">Total BSLs</div>
+                    <div style="font-weight:700;font-size:13px;color:#7C3AED;">${props.totalBsls.toLocaleString()}</div>
+                </div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;">
+                <tr style="background:#F5F3FF;"><th style="text-align:left;padding:4px 8px;color:#6B21A8;font-weight:600;">Provider</th><th style="text-align:right;padding:4px 8px;color:#6B21A8;font-weight:600;">BSLs Filed</th></tr>
+                ${provRows}
+            </table>
+            ${props.hu100 ? `<div style="font-size:10px;color:#64748B;margin-bottom:6px;">Census HUs: ${props.hu100.toLocaleString()} | Pop: ${(props.pop100 || 0).toLocaleString()}</div>` : ''}
+            <div style="border-top:1px dashed #E2E8F0;padding-top:6px;">
+                <a href="https://broadbandmap.fcc.gov/location-summary/fixed?speed=25_3&zoom=14" target="_blank" style="font-size:10px;color:#2563EB;text-decoration:underline;font-weight:600;">Verify on FCC Broadband Map</a>
+                <span style="font-size:9px;color:#94A3B8;margin-left:4px;">Source: FCC BDC Jun 2025</span>
+            </div>
+        </div>`;
+    }
+
+    function toggleOverlapLayer() {
+        const ov = window.BDC_OVERLAPS;
+        if (!ov || !ov.computed) {
+            alert('BDC data still loading. Please wait.');
+            return;
+        }
+        overlapLayerActive = !overlapLayerActive;
+        const btn = document.getElementById('bdcToggle_overlap');
+
+        if (overlapLayerActive) {
+            btn.style.background = '#7C3AED';
+            btn.style.color = 'white';
+            renderOverlapLayer(bdcCurrentState);
+            map.addLayer(bdcLayers.overlap);
+            // Dim other BDC layers
+            Object.entries(bdcLayers).forEach(([key, layer]) => {
+                if (key !== 'overlap' && bdcProviderConfig[key] && bdcProviderConfig[key].active) {
+                    layer.eachLayer(l => { if (l.setStyle) l.setStyle({ fillOpacity: 0.1, opacity: 0.2 }); });
+                }
+            });
+        } else {
+            btn.style.background = '#E2E8F0';
+            btn.style.color = '#475569';
+            map.removeLayer(bdcLayers.overlap);
+            // Restore other BDC layers
+            renderAllBDC();
         }
     }
 
