@@ -1351,6 +1351,14 @@
     // Cross-references all BDC datasets to find fiber-on-fiber overlap
     // ================================================================
     function computeBDCOverlaps() {
+        // Direct references — const/let globals are NOT window properties
+        const bdcSources = {
+            GONETSPEED_BDC_COVERAGE: typeof GONETSPEED_BDC_COVERAGE !== 'undefined' ? GONETSPEED_BDC_COVERAGE : null,
+            VERIZON_BDC_COVERAGE: typeof VERIZON_BDC_COVERAGE !== 'undefined' ? VERIZON_BDC_COVERAGE : null,
+            FRONTIER_BDC_COVERAGE: typeof FRONTIER_BDC_COVERAGE !== 'undefined' ? FRONTIER_BDC_COVERAGE : null,
+            FIDIUM_BDC_COVERAGE: typeof FIDIUM_BDC_COVERAGE !== 'undefined' ? FIDIUM_BDC_COVERAGE : null,
+        };
+
         const datasets = [
             { key: 'gonetspeed', entity: 'gonetspeed', label: 'GoNetSpeed', global: 'GONETSPEED_BDC_COVERAGE' },
             { key: 'verizon', entity: 'verizon_frontier', label: 'Verizon', global: 'VERIZON_BDC_COVERAGE' },
@@ -1362,7 +1370,7 @@
         const bgIndex = {};
 
         datasets.forEach(ds => {
-            const data = window[ds.global];
+            const data = bdcSources[ds.global];
             if (!data || !data.features) return;
             data.features.forEach(f => {
                 const id = f.properties.id;
