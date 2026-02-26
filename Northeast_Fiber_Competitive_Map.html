@@ -433,7 +433,21 @@
                     <h2 class="font-bold text-lg">Fiber-on-Fiber Overlap (FCC BDC)</h2>
                     <span class="px-2 py-0.5 bg-white/20 rounded text-[10px] font-medium">COMPUTED FROM BDC DATA</span>
                 </div>
-                <p class="text-purple-200 text-xs mb-4">Block groups where 2+ fiber providers have filed FTTP coverage in FCC BDC (Jun 2025). Competitive entities: GoNetSpeed, Verizon/Frontier (combined), Fidium.</p>
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                    <p class="text-purple-200 text-xs flex-1">Block groups where 2+ fiber providers have filed FTTP coverage in FCC BDC (Jun 2025). Competitive entities: GoNetSpeed, Verizon/Frontier (combined), Fidium.</p>
+                    <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                        <label class="text-purple-200 text-[10px] font-medium whitespace-nowrap">Min BSLs per provider:</label>
+                        <select id="overlapMinBSLSelect" onchange="recomputeOverlaps(parseInt(this.value))"
+                            class="bg-white/20 text-white text-xs rounded px-2 py-1 border border-white/30 outline-none cursor-pointer" style="background:rgba(255,255,255,0.15);">
+                            <option value="1" style="color:#1E293B;">1 (all filings)</option>
+                            <option value="5" style="color:#1E293B;">5</option>
+                            <option value="10" selected style="color:#1E293B;">10 (default)</option>
+                            <option value="25" style="color:#1E293B;">25</option>
+                            <option value="50" style="color:#1E293B;">50</option>
+                        </select>
+                        <span class="text-purple-300 text-[10px]" id="overlapThresholdNote">Filters edge-of-network noise</span>
+                    </div>
+                </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="overlapSummary">
                     <div class="bg-white/10 rounded-lg p-3">
                         <p class="text-purple-200 text-[10px]">Loading BDC data...</p>
@@ -1146,6 +1160,33 @@
         updateProviderOverlapCard();
     }
 
+    function recomputeOverlaps(newThreshold) {
+        overlapMinBSL = newThreshold;
+        // Update the threshold note
+        var note = document.getElementById('overlapThresholdNote');
+        if (note) {
+            if (newThreshold <= 1) note.textContent = 'Showing all BDC filings (may include noise)';
+            else if (newThreshold <= 5) note.textContent = 'Light filtering';
+            else if (newThreshold <= 10) note.textContent = 'Filters edge-of-network noise';
+            else if (newThreshold <= 25) note.textContent = 'Moderate filtering';
+            else note.textContent = 'Aggressive — only high-density overlap';
+        }
+        // Recompute using stashed raw data (no args = use _bdcRawArgs)
+        try {
+            computeBDCOverlaps();
+            renderOverlapTab();
+            // Re-render the overlap map layer if it's active
+            if (typeof renderOverlapLayer === 'function' && bdcLayers.overlap && map.hasLayer(bdcLayers.overlap)) {
+                renderOverlapLayer(bdcCurrentState);
+            }
+        } catch(e) {
+            console.error('[Overlap] recomputeOverlaps error:', e);
+        }
+        // Restore the dropdown selection since renderOverlapTab rebuilds the HTML
+        var sel = document.getElementById('overlapMinBSLSelect');
+        if (sel) sel.value = String(newThreshold);
+    }
+
     function renderOverlapTab() {
         const ov = window.BDC_OVERLAPS;
         if (!ov || !ov.computed) {
@@ -1176,7 +1217,7 @@
             <div class="bg-white/10 rounded-lg p-3">
                 <p class="text-purple-200 text-[10px] mb-1">Total Overlap Block Groups</p>
                 <p class="font-bold text-2xl">${ov.totalOverlapBGs.toLocaleString()}</p>
-                <p class="text-purple-300 text-[10px]">2+ fiber providers</p>
+                <p class="text-purple-300 text-[10px]">2+ fiber providers (min ${overlapMinBSL} BSLs each)</p>
             </div>
             <div class="bg-white/10 rounded-lg p-3">
                 <p class="text-purple-200 text-[10px] mb-1">Contested BSLs</p>
@@ -1406,13 +1447,25 @@
     // BDC OVERLAP COMPUTATION ENGINE
     // Cross-references all BDC datasets to find fiber-on-fiber overlap
     // ================================================================
+    // Minimum BSL threshold — filters out edge-of-network spillover.
+    // A provider must have at least this many BSLs in a block group to count as "present."
+    var overlapMinBSL = 10;
+
+    // Stash raw BDC args so we can recompute with different thresholds
+    var _bdcRawArgs = [null, null, null, null];
+
     // Data is passed directly from the loadBDCScripts callback — no scope lookups needed.
     function computeBDCOverlaps(gnsRaw, vzRaw, frRaw, fdmRaw) {
-        console.log('[Overlap] computeBDCOverlaps called with:',
-            'GNS=' + (gnsRaw ? gnsRaw.features.length : 'null'),
-            'VZ=' + (vzRaw ? vzRaw.features.length : 'null'),
-            'FR=' + (frRaw ? frRaw.features.length : 'null'),
-            'FDM=' + (fdmRaw ? fdmRaw.features.length : 'null'));
+        // If called with args, stash them for recompute; otherwise use stashed
+        if (gnsRaw !== undefined) _bdcRawArgs = [gnsRaw, vzRaw, frRaw, fdmRaw];
+        else { gnsRaw = _bdcRawArgs[0]; vzRaw = _bdcRawArgs[1]; frRaw = _bdcRawArgs[2]; fdmRaw = _bdcRawArgs[3]; }
+
+        var minBSL = overlapMinBSL;
+        console.log('[Overlap] Computing with minBSL=' + minBSL +
+            ' GNS=' + (gnsRaw ? gnsRaw.features.length : 'null') +
+            ' VZ=' + (vzRaw ? vzRaw.features.length : 'null') +
+            ' FR=' + (frRaw ? frRaw.features.length : 'null') +
+            ' FDM=' + (fdmRaw ? fdmRaw.features.length : 'null'));
 
         // Build dataset list: each maps to a competitive entity
         var allDatasets = [];
@@ -1424,12 +1477,15 @@
         // Build block group index: GEOID → { providers, geometry, state, county }
         var bgIndex = {};
         var totalFeatures = 0;
+        var skippedBelowMin = 0;
 
         for (var d = 0; d < allDatasets.length; d++) {
             var ds = allDatasets[d];
             totalFeatures += ds.features.length;
             for (var i = 0; i < ds.features.length; i++) {
                 var f = ds.features[i];
+                // Skip features below the minimum BSL threshold
+                if (f.properties.bsls < minBSL) { skippedBelowMin++; continue; }
                 var id = f.properties.id;
                 if (!bgIndex[id]) {
                     bgIndex[id] = {
@@ -1454,10 +1510,9 @@
             }
         }
 
-        console.log('[Overlap] Indexed ' + Object.keys(bgIndex).length + ' unique BGs from ' + totalFeatures + ' total features');
+        console.log('[Overlap] Indexed ' + Object.keys(bgIndex).length + ' BGs (' + skippedBelowMin + ' features skipped below ' + minBSL + ' BSL threshold)');
 
-        // Filter to BGs with 2+ distinct competitive entities
-        // providers is a plain object: { gonetspeed: {bsls, label}, verizon_frontier: {...}, ... }
+        // Filter to BGs with 2+ distinct competitive entities (each above threshold)
         var overlapBGs = {};
         var bgIds = Object.keys(bgIndex);
         for (var b = 0; b < bgIds.length; b++) {
@@ -1467,7 +1522,7 @@
                 overlapBGs[bid] = bgIndex[bid];
             }
         }
-        console.log('[Overlap] Found ' + Object.keys(overlapBGs).length + ' overlap BGs (2+ entities)');
+        console.log('[Overlap] Found ' + Object.keys(overlapBGs).length + ' overlap BGs (2+ entities, each >=' + minBSL + ' BSLs)');
 
         // Aggregation: byState
         var byState = {};
