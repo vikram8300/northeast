@@ -335,9 +335,10 @@ def fetch_block_group_polygons(block_groups_data):
     return all_polys, failed_counties
 
 
-def simplify_coords(coords, tolerance=0.0005):
+def simplify_coords(coords, tolerance=0.002):
+    """Distance-based vertex decimation. tolerance=0.002 (~220m) is good for zoom 7-10 BG shading."""
     if len(coords) <= 4:
-        return coords
+        return [[round(c[0], 4), round(c[1], 4)] for c in coords]
     simplified = [coords[0]]
     for i in range(1, len(coords)):
         dx = coords[i][0] - simplified[-1][0]
@@ -346,7 +347,8 @@ def simplify_coords(coords, tolerance=0.0005):
             simplified.append(coords[i])
     if simplified[-1] != coords[-1]:
         simplified.append(coords[-1])
-    return [[round(c[0], 5), round(c[1], 5)] for c in simplified]
+    # 4 decimal places = ~11m precision, more than enough
+    return [[round(c[0], 4), round(c[1], 4)] for c in simplified]
 
 
 def generate_and_write(provider_key, block_groups_data, polygons):
@@ -383,10 +385,8 @@ def generate_and_write(provider_key, block_groups_data, polygons):
             'type': 'Feature',
             'properties': {
                 'id': bg_id, 'bsls': bg_data['bsls'], 'blocks': bg_data['blocks'],
-                'res': bg_data['res'], 'bus': bg_data['bus'],
                 'state': bg_data['state'], 'county': bg_data['county'],
-                'countyFips': bg_data['countyFips'], 'tractId': bg_data['tractId'],
-                'areaLandSqKm': round(area_land / 1e6, 2),
+                'areaLandSqKm': round(area_land / 1e6, 1),
                 'hu100': int(hu100), 'pop100': int(pop100),
                 'coveragePct': min(coverage_pct, 100),
             },

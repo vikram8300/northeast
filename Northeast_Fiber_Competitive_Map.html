@@ -139,10 +139,27 @@
     <!-- Data & Logic -->
     <script src="data.js"></script>
     <script src="calculations.js"></script>
-    <script src="gonetspeed_bdc.js"></script>
-    <script src="frontier_bdc.js"></script>
-    <script src="verizon_bdc.js"></script>
-    <script src="fidium_bdc.js"></script>
+    <!-- BDC data loaded async to avoid blocking page render (~16MB total) -->
+    <script>
+    function loadBDCScripts() {
+        const files = ['gonetspeed_bdc.js', 'frontier_bdc.js', 'verizon_bdc.js', 'fidium_bdc.js'];
+        let loaded = 0;
+        files.forEach(f => {
+            const s = document.createElement('script');
+            s.src = f;
+            s.async = true;
+            s.onload = () => {
+                loaded++;
+                if (loaded === files.length && typeof renderAllBDC === 'function') {
+                    // Re-merge VZ+Frontier data now that scripts are loaded
+                    if (typeof _refreshVzFrontierData === 'function') _refreshVzFrontierData();
+                    renderAllBDC();
+                }
+            };
+            document.head.appendChild(s);
+        });
+    }
+    </script>
 
     <div class="max-w-[1440px] mx-auto">
         <!-- Header -->
@@ -1129,20 +1146,26 @@
     // FCC BDC COVERAGE LAYERS (Multi-Provider, Block Group Level)
     // ================================================================
     // Merge Verizon + Frontier into one combined FeatureCollection
-    const _vzFrontierData = (function() {
+    function _buildVzFrontierData() {
         const vz = typeof VERIZON_BDC_COVERAGE !== 'undefined' ? VERIZON_BDC_COVERAGE : null;
         const fr = typeof FRONTIER_BDC_COVERAGE !== 'undefined' ? FRONTIER_BDC_COVERAGE : null;
         if (!vz && !fr) return null;
         const features = [];
-        // Tag each feature with its source provider for popups
         if (vz) vz.features.forEach(f => { f.properties._src = 'verizon'; features.push(f); });
         if (fr) fr.features.forEach(f => { f.properties._src = 'frontier'; features.push(f); });
         return { type: 'FeatureCollection', features };
-    })();
+    }
+
+    // Called after async BDC scripts load to refresh data refs
+    function _refreshVzFrontierData() {
+        bdcProviderConfig.gonetspeed.data = typeof GONETSPEED_BDC_COVERAGE !== 'undefined' ? GONETSPEED_BDC_COVERAGE : null;
+        bdcProviderConfig.verizon_frontier.data = _buildVzFrontierData();
+        bdcProviderConfig.fidium.data = typeof FIDIUM_BDC_COVERAGE !== 'undefined' ? FIDIUM_BDC_COVERAGE : null;
+    }
 
     const bdcProviderConfig = {
         gonetspeed: {
-            data: typeof GONETSPEED_BDC_COVERAGE !== 'undefined' ? GONETSPEED_BDC_COVERAGE : null,
+            data: null, // loaded async
             name: 'GoNetSpeed',
             detail: 'Future Fiber FinCo',
             fccId: '131378',
@@ -1155,7 +1178,7 @@
             active: true,
         },
         verizon_frontier: {
-            data: _vzFrontierData,
+            data: null, // loaded async
             name: 'Verizon / Frontier',
             detail: 'Fios + legacy Frontier fiber',
             fccId: '131425',
@@ -1169,7 +1192,7 @@
             active: true,
         },
         fidium: {
-            data: typeof FIDIUM_BDC_COVERAGE !== 'undefined' ? FIDIUM_BDC_COVERAGE : null,
+            data: null, // loaded async
             name: 'Fidium Fiber',
             detail: 'Consolidated (CCI)',
             fccId: '130335',
@@ -1399,14 +1422,11 @@
         }
     }
 
-    // Render all BDC layers on startup (all ON by default)
-    setTimeout(() => renderAllBDC(), 300);
+    // Load census tracts immediately, BDC scripts load async in background
+    setTimeout(() => loadAllTracts(), 300);
 
-    // ================================================================
-    // LOAD ALL TRACTS ON START (for demo)
-    // ================================================================
-    // Auto-load ALL census tracts on startup for full regional view
-    setTimeout(() => loadAllTracts(), 500);
+    // Kick off async BDC loading (renders automatically when all 4 files arrive)
+    loadBDCScripts();
     </script>
 </body>
 </html>

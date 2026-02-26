@@ -268,16 +268,14 @@ def fetch_block_group_polygons(block_groups_data):
     return polygons, failed_counties
 
 
-def simplify_coords(coords, tolerance=0.0005):
+def simplify_coords(coords, tolerance=0.002):
     """
-    Simplify polygon coordinates using Ramer-Douglas-Peucker-like reduction.
-    Keeps every Nth point to reduce file size while maintaining shape.
-    tolerance is in degrees (~55m at 41N latitude).
+    Distance-based vertex decimation for polygon coordinates.
+    tolerance=0.002 (~220m) good for zoom 7-10 block group shading.
     """
     if len(coords) <= 4:
-        return coords
+        return [[round(c[0], 4), round(c[1], 4)] for c in coords]
 
-    # Simple decimation: keep points that are at least `tolerance` apart
     simplified = [coords[0]]
     for i in range(1, len(coords)):
         dx = coords[i][0] - simplified[-1][0]
@@ -285,14 +283,11 @@ def simplify_coords(coords, tolerance=0.0005):
         if (dx * dx + dy * dy) > (tolerance * tolerance):
             simplified.append(coords[i])
 
-    # Always keep the closing point
     if simplified[-1] != coords[-1]:
         simplified.append(coords[-1])
 
-    # Round to 5 decimal places (~1m precision)
-    simplified = [[round(c[0], 5), round(c[1], 5)] for c in simplified]
-
-    return simplified
+    # 4 decimal places = ~11m precision
+    return [[round(c[0], 4), round(c[1], 4)] for c in simplified]
 
 
 def generate_js_output(block_groups_data, polygons):
@@ -337,16 +332,12 @@ def generate_js_output(block_groups_data, polygons):
                 'id': bg_id,
                 'bsls': bg_data['bsls'],
                 'blocks': bg_data['blocks'],
-                'res': bg_data['res'],
-                'bus': bg_data['bus'],
                 'state': bg_data['state'],
                 'county': bg_data['county'],
-                'countyFips': bg_data['countyFips'],
-                'tractId': bg_data['tractId'],
-                'areaLandSqKm': round(area_land / 1e6, 2),
+                'areaLandSqKm': round(area_land / 1e6, 1),
                 'hu100': int(hu100),
                 'pop100': int(pop100),
-                'coveragePct': min(coverage_pct, 100),  # Cap at 100%
+                'coveragePct': min(coverage_pct, 100),
             },
             'geometry': geom,
         }
