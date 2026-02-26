@@ -1351,25 +1351,74 @@
     // Cross-references all BDC datasets to find fiber-on-fiber overlap
     // ================================================================
     function computeBDCOverlaps() {
-        // Read from bdcProviderConfig (populated by _refreshVzFrontierData) —
-        // this is the same data source renderAllBDC() uses to draw the map layers.
-        // Using bdcProviderConfig avoids the const/let global scope issue entirely.
-        const datasets = [
-            { entity: 'gonetspeed', label: 'GoNetSpeed', configKey: 'gonetspeed' },
-            { entity: 'verizon_frontier', label: 'Verizon/Frontier', configKey: 'verizon_frontier' },
-            { entity: 'fidium', label: 'Fidium', configKey: 'fidium' },
+        // BDC files now use var (window properties). Access via window[] as primary,
+        // fall back to bdcProviderConfig, then try typeof direct reference.
+        // This triple-fallback ensures data is found regardless of scoping context.
+        const sources = [
+            { entity: 'gonetspeed', label: 'GoNetSpeed', windowKey: 'GONETSPEED_BDC_COVERAGE', configKey: 'gonetspeed' },
+            { entity: 'verizon_frontier', label: 'Verizon/Frontier', windowKey: null, configKey: 'verizon_frontier' },
+            { entity: 'fidium', label: 'Fidium', windowKey: 'FIDIUM_BDC_COVERAGE', configKey: 'fidium' },
         ];
+
+        // For GoNetSpeed and Fidium: use the raw BDC FeatureCollections directly.
+        // For Verizon/Frontier: use the merged config data (already combined by _refreshVzFrontierData).
+        // Also load raw VZ and FR separately so we can detect individual provider overlaps.
+        const allDatasets = [];
+
+        // GoNetSpeed
+        const gnsData = window.GONETSPEED_BDC_COVERAGE ||
+            (bdcProviderConfig.gonetspeed && bdcProviderConfig.gonetspeed.data) || null;
+        if (gnsData && gnsData.features) {
+            allDatasets.push({ entity: 'gonetspeed', label: 'GoNetSpeed', features: gnsData.features });
+            console.log('[Overlap] GoNetSpeed: ' + gnsData.features.length + ' features');
+        } else {
+            console.warn('[Overlap] GoNetSpeed: NO DATA');
+        }
+
+        // Verizon (raw)
+        const vzData = window.VERIZON_BDC_COVERAGE || null;
+        if (vzData && vzData.features) {
+            allDatasets.push({ entity: 'verizon_frontier', label: 'Verizon', features: vzData.features });
+            console.log('[Overlap] Verizon: ' + vzData.features.length + ' features');
+        } else {
+            console.warn('[Overlap] Verizon raw: NO DATA, trying config');
+        }
+
+        // Frontier (raw)
+        const frData = window.FRONTIER_BDC_COVERAGE || null;
+        if (frData && frData.features) {
+            allDatasets.push({ entity: 'verizon_frontier', label: 'Frontier', features: frData.features });
+            console.log('[Overlap] Frontier: ' + frData.features.length + ' features');
+        } else {
+            console.warn('[Overlap] Frontier raw: NO DATA');
+        }
+
+        // If neither VZ nor FR raw data found, try merged config
+        if (!vzData && !frData && bdcProviderConfig.verizon_frontier && bdcProviderConfig.verizon_frontier.data) {
+            const merged = bdcProviderConfig.verizon_frontier.data;
+            allDatasets.push({ entity: 'verizon_frontier', label: 'Verizon/Frontier', features: merged.features });
+            console.log('[Overlap] VZ/FR merged from config: ' + merged.features.length + ' features');
+        }
+
+        // Fidium
+        const fdmData = window.FIDIUM_BDC_COVERAGE ||
+            (bdcProviderConfig.fidium && bdcProviderConfig.fidium.data) || null;
+        if (fdmData && fdmData.features) {
+            allDatasets.push({ entity: 'fidium', label: 'Fidium', features: fdmData.features });
+            console.log('[Overlap] Fidium: ' + fdmData.features.length + ' features');
+        } else {
+            console.warn('[Overlap] Fidium: NO DATA');
+        }
+
+        console.log('[Overlap] Total datasets to process:', allDatasets.length);
 
         // Build block group index: GEOID → { providers: Map<entity, {bsls, label}>, geometry, state, county }
         const bgIndex = {};
         let totalFeatures = 0;
 
-        datasets.forEach(ds => {
-            const cfg = bdcProviderConfig[ds.configKey];
-            if (!cfg || !cfg.data || !cfg.data.features) return;
-            const features = cfg.data.features;
-            totalFeatures += features.length;
-            features.forEach(f => {
+        allDatasets.forEach(ds => {
+            totalFeatures += ds.features.length;
+            ds.features.forEach(f => {
                 const id = f.properties.id;
                 if (!bgIndex[id]) {
                     bgIndex[id] = {
@@ -1385,14 +1434,16 @@
                 if (!bg.providers.has(ds.entity)) {
                     bg.providers.set(ds.entity, { bsls: f.properties.bsls, label: ds.label });
                 } else {
-                    // Same entity appearing again (e.g. VZ + Frontier features in merged data)
+                    // Same entity (VZ + Frontier both mapped to verizon_frontier)
                     const existing = bg.providers.get(ds.entity);
                     existing.bsls = Math.max(existing.bsls, f.properties.bsls);
+                    if (ds.label === 'Frontier' || ds.label === 'Verizon') existing.label = 'Verizon/Frontier';
                 }
             });
         });
-        console.log('BDC Overlap: indexed', Object.keys(bgIndex).length, 'unique BGs from', totalFeatures, 'total features');
-        // Log per-entity counts for debugging
+
+        console.log('[Overlap] Indexed', Object.keys(bgIndex).length, 'unique BGs from', totalFeatures, 'total features');
+        // Log per-entity counts
         const entityCounts = {};
         Object.values(bgIndex).forEach(bg => {
             bg.providers.forEach((v, entity) => {
@@ -1400,7 +1451,7 @@
                 entityCounts[entity]++;
             });
         });
-        console.log('BDC Overlap entity BG counts:', JSON.stringify(entityCounts));
+        console.log('[Overlap] Entity BG counts:', JSON.stringify(entityCounts));
 
         // Filter to BGs with 2+ distinct competitive entities
         const overlapBGs = {};
