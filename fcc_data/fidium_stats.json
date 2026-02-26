@@ -1,0 +1,97 @@
+{
+  "provider": "Fidium Fiber (CCI)",
+  "providerId": 130335,
+  "brand": "Consolidated Communications",
+  "filing": "Jun 2025",
+  "technology": "Fiber to the Premises (50)",
+  "totalFiberBSLs": 620050,
+  "totalBlockGroups": 2116,
+  "states": {
+    "ME": {
+      "bsls": 242079,
+      "blockGroups": 814,
+      "counties": [
+        "Androscoggin",
+        "Aroostook",
+        "Cumberland",
+        "Franklin",
+        "Hancock",
+        "Kennebec",
+        "Knox",
+        "Lincoln",
+        "Oxford",
+        "Penobscot",
+        "Piscataquis",
+        "Sagadahoc",
+        "Somerset",
+        "Waldo",
+        "Washington",
+        "York"
+      ]
+    },
+    "MA": {
+      "bsls": 3,
+      "blockGroups": 1,
+      "counties": [
+        "Berkshire"
+      ]
+    },
+    "NH": {
+      "bsls": 253546,
+      "blockGroups": 842,
+      "counties": [
+        "Belknap",
+        "Carroll",
+        "Cheshire",
+        "Coos",
+        "Grafton",
+        "Hillsborough",
+        "Merrimack",
+        "Rockingham",
+        "Strafford",
+        "Sullivan"
+      ]
+    },
+    "NY": {
+      "bsls": 13664,
+      "blockGroups": 79,
+      "counties": [
+        "Chautauqua",
+        "Columbia",
+        "Dutchess",
+        "Rensselaer"
+      ]
+    },
+    "PA": {
+      "bsls": 23555,
+      "blockGroups": 72,
+      "counties": [
+        "Allegheny",
+        "Armstrong",
+        "Butler",
+        "Washington",
+        "Westmoreland"
+      ]
+    },
+    "VT": {
+      "bsls": 87203,
+      "blockGroups": 308,
+      "counties": [
+        "Addison",
+        "Bennington",
+        "Caledonia",
+        "Chittenden",
+        "Essex",
+        "Franklin",
+        "Grand Isle",
+        "Lamoille",
+        "Orange",
+        "Orleans",
+        "Rutland",
+        "Washington",
+        "Windham",
+        "Windsor"
+      ]
+    }
+  }
+}
