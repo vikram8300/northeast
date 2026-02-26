@@ -1,0 +1,94 @@
+{
+  "provider": "Verizon Fios",
+  "providerId": 131425,
+  "brand": "Verizon",
+  "filing": "Jun 2025",
+  "technology": "Fiber to the Premises (50)",
+  "totalFiberBSLs": 3318838,
+  "totalBlockGroups": 14949,
+  "states": {
+    "CT": {
+      "bsls": 10751,
+      "blockGroups": 44,
+      "counties": [
+        "Fairfield"
+      ]
+    },
+    "MA": {
+      "bsls": 914782,
+      "blockGroups": 3129,
+      "counties": [
+        "Barnstable",
+        "Berkshire",
+        "Bristol",
+        "Essex",
+        "Franklin",
+        "Hampden",
+        "Middlesex",
+        "Norfolk",
+        "Plymouth",
+        "Suffolk",
+        "Worcester"
+      ]
+    },
+    "NH": {
+      "bsls": 1,
+      "blockGroups": 1,
+      "counties": [
+        "Hillsborough"
+      ]
+    },
+    "NY": {
+      "bsls": 2123454,
+      "blockGroups": 11081,
+      "counties": [
+        "Albany",
+        "Bronx",
+        "Cayuga",
+        "Clinton",
+        "Cortland",
+        "Dutchess",
+        "Erie",
+        "Fulton",
+        "Herkimer",
+        "Jefferson",
+        "Kings",
+        "Lewis",
+        "Madison",
+        "Montgomery",
+        "Nassau",
+        "New York",
+        "Niagara",
+        "Oneida",
+        "Onondaga",
+        "Orange",
+        "Oswego",
+        "Otsego",
+        "Putnam",
+        "Queens",
+        "Rensselaer",
+        "Richmond",
+        "Rockland",
+        "Saratoga",
+        "Schenectady",
+        "Schoharie",
+        "St. Lawrence",
+        "Suffolk",
+        "Tompkins",
+        "Ulster",
+        "Washington",
+        "Westchester"
+      ]
+    },
+    "RI": {
+      "bsls": 269850,
+      "blockGroups": 694,
+      "counties": [
+        "Bristol",
+        "Kent",
+        "Providence",
+        "Washington"
+      ]
+    }
+  }
+}

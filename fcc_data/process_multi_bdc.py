@@ -8,6 +8,7 @@ Outputs: {provider}_bdc.js per provider (GeoJSON with block group polygons)
 Providers:
   - Frontier (130258): CT, NY, PA
   - Consolidated/Fidium (130335): NH, ME, VT, MA, NY, PA
+  - Verizon (131425): CT, MA, NH, NY, RI, VT
 """
 
 import csv
@@ -54,12 +55,30 @@ PROVIDERS = {
         'js_file': 'fidium_bdc.js',
         'color': '#8B5CF6',  # purple
     },
+    'verizon': {
+        'id': 131425,
+        'brand': 'Verizon',
+        'display': 'Verizon Fios',
+        'frn': '0018506568',
+        'tech_filter': 50,  # Fiber only
+        'files': {
+            '09': 'bdc_09_131425_fixed_broadband_J25_03feb2026.csv',
+            '25': 'bdc_25_131425_fixed_broadband_J25_03feb2026.csv',
+            '33': 'bdc_33_131425_fixed_broadband_J25_03feb2026.csv',
+            '36': 'bdc_36_131425_fixed_broadband_J25_03feb2026.csv',
+            '44': 'bdc_44_131425_fixed_broadband_J25_03feb2026.csv',
+            '50': 'bdc_50_131425_fixed_broadband_J25_03feb2026.csv',
+        },
+        'js_const': 'VERIZON_BDC_COVERAGE',
+        'js_file': 'verizon_bdc.js',
+        'color': '#DC2626',  # red
+    },
 }
 
 # State FIPS codes
 STATE_FIPS = {
     '09': 'CT', '23': 'ME', '25': 'MA', '33': 'NH',
-    '36': 'NY', '42': 'PA', '50': 'VT'
+    '36': 'NY', '42': 'PA', '44': 'RI', '50': 'VT'
 }
 
 # County FIPS to name mapping
@@ -138,6 +157,9 @@ COUNTY_NAMES = {
     '50013': 'Grand Isle', '50015': 'Lamoille', '50017': 'Orange',
     '50019': 'Orleans', '50021': 'Rutland', '50023': 'Washington',
     '50025': 'Windham', '50027': 'Windsor',
+    # RI
+    '44001': 'Bristol', '44003': 'Kent', '44005': 'Newport',
+    '44007': 'Providence', '44009': 'Washington',
 }
 
 # ---- SHARED POLYGON CACHE ----

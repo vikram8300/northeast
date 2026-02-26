@@ -141,6 +141,7 @@
     <script src="calculations.js"></script>
     <script src="gonetspeed_bdc.js"></script>
     <script src="frontier_bdc.js"></script>
+    <script src="verizon_bdc.js"></script>
     <script src="fidium_bdc.js"></script>
 
     <div class="max-w-[1440px] mx-auto">
@@ -188,10 +189,10 @@
                                 <button id="bdcToggle_gonetspeed" onclick="toggleBDCProvider('gonetspeed')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#0D9488;color:white;">
                                     GoNetSpeed
                                 </button>
-                                <button id="bdcToggle_frontier" onclick="toggleBDCProvider('frontier')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#6366F1;color:white;">
-                                    Frontier
+                                <button id="bdcToggle_verizon_frontier" onclick="toggleBDCProvider('verizon_frontier')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#DC2626;color:white;">
+                                    Verizon / Frontier
                                 </button>
-                                <button id="bdcToggle_fidium" onclick="toggleBDCProvider('fidium')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#DC2626;color:white;">
+                                <button id="bdcToggle_fidium" onclick="toggleBDCProvider('fidium')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#6366F1;color:white;">
                                     Fidium
                                 </button>
                                 <select id="bdcStateFilter" onchange="filterBDCByState()" class="text-xs rounded-lg border border-slate-200 px-2 py-1.5 bg-white">
@@ -468,7 +469,7 @@
     // BDC coverage layers - one per provider, all ON by default
     const bdcLayers = {
         gonetspeed: L.layerGroup().addTo(map),
-        frontier: L.layerGroup().addTo(map),
+        verizon_frontier: L.layerGroup().addTo(map),
         fidium: L.layerGroup().addTo(map),
     };
 
@@ -659,8 +660,8 @@
     legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-pink-500 to-red-500 animate-pulse"></div><span>New Build</span></div>`;
     legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-full bg-purple-500" style="border: 2px dashed #7C3AED;"></div><span>Overlap</span></div>`;
     legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#CCFBF1,#0D9488);"></div><span>GNS BDC</span></div>`;
-    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#E0E7FF,#6366F1);"></div><span>Frontier BDC</span></div>`;
-    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#FEE2E2,#DC2626);"></div><span>Fidium BDC</span></div>`;
+    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#FEE2E2,#DC2626);"></div><span>VZ/Frontier BDC</span></div>`;
+    legendBar.innerHTML += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded" style="background:linear-gradient(135deg,#E0E7FF,#6366F1);"></div><span>Fidium BDC</span></div>`;
 
     // ================================================================
     // MAP MARKERS
@@ -1127,6 +1128,18 @@
     // ================================================================
     // FCC BDC COVERAGE LAYERS (Multi-Provider, Block Group Level)
     // ================================================================
+    // Merge Verizon + Frontier into one combined FeatureCollection
+    const _vzFrontierData = (function() {
+        const vz = typeof VERIZON_BDC_COVERAGE !== 'undefined' ? VERIZON_BDC_COVERAGE : null;
+        const fr = typeof FRONTIER_BDC_COVERAGE !== 'undefined' ? FRONTIER_BDC_COVERAGE : null;
+        if (!vz && !fr) return null;
+        const features = [];
+        // Tag each feature with its source provider for popups
+        if (vz) vz.features.forEach(f => { f.properties._src = 'verizon'; features.push(f); });
+        if (fr) fr.features.forEach(f => { f.properties._src = 'frontier'; features.push(f); });
+        return { type: 'FeatureCollection', features };
+    })();
+
     const bdcProviderConfig = {
         gonetspeed: {
             data: typeof GONETSPEED_BDC_COVERAGE !== 'undefined' ? GONETSPEED_BDC_COVERAGE : null,
@@ -1141,16 +1154,17 @@
             speeds: '1000/1000',
             active: true,
         },
-        frontier: {
-            data: typeof FRONTIER_BDC_COVERAGE !== 'undefined' ? FRONTIER_BDC_COVERAGE : null,
-            name: 'Frontier',
-            detail: 'now Verizon',
-            fccId: '130258',
-            color: '#6366F1',
-            colorLight: '#E0E7FF',
-            colorMid: '#818CF8',
-            colorDark: '#312E81',
-            bgLight: '#EEF2FF',
+        verizon_frontier: {
+            data: _vzFrontierData,
+            name: 'Verizon / Frontier',
+            detail: 'Fios + legacy Frontier fiber',
+            fccId: '131425',
+            fccIdAlt: '130258',
+            color: '#DC2626',
+            colorLight: '#FEE2E2',
+            colorMid: '#F87171',
+            colorDark: '#7F1D1D',
+            bgLight: '#FEF2F2',
             speeds: '2000/2000',
             active: true,
         },
@@ -1159,11 +1173,11 @@
             name: 'Fidium Fiber',
             detail: 'Consolidated (CCI)',
             fccId: '130335',
-            color: '#DC2626',
-            colorLight: '#FEE2E2',
-            colorMid: '#F87171',
-            colorDark: '#7F1D1D',
-            bgLight: '#FEF2F2',
+            color: '#6366F1',
+            colorLight: '#E0E7FF',
+            colorMid: '#818CF8',
+            colorDark: '#312E81',
+            bgLight: '#EEF2FF',
             speeds: '2000/2000',
             active: true,
         },
@@ -1202,7 +1216,15 @@
 
     function buildBDCPopup(props, provKey) {
         const cfg = bdcProviderConfig[provKey];
-        const fccVerifyUrl = `https://broadbandmap.fcc.gov/provider-detail/fixed?version=jun2025&providers=${cfg.fccId}_50_on&zoom=13&speed=0_0`;
+        // For combined Verizon/Frontier layer, show the actual sub-provider
+        let provName = cfg.name;
+        let provDetail = cfg.detail;
+        let fccId = cfg.fccId;
+        if (provKey === 'verizon_frontier' && props._src) {
+            if (props._src === 'verizon') { provName = 'Verizon Fios'; provDetail = 'FCC ID 131425'; fccId = '131425'; }
+            else { provName = 'Frontier'; provDetail = 'now Verizon, FCC ID 130258'; fccId = '130258'; }
+        }
+        const fccVerifyUrl = `https://broadbandmap.fcc.gov/provider-detail/fixed?version=jun2025&providers=${fccId}_50_on&zoom=13&speed=0_0`;
         return `
             <div style="font-family:Inter,-apple-system,sans-serif;min-width:260px;">
                 <div style="background:${cfg.color};color:white;padding:8px 12px;margin:-12px -16px 10px;border-radius:8px 8px 0 0;">
@@ -1245,7 +1267,7 @@
                     </div>
                 </div>
                 <div style="font-size:10px;color:#64748B;border-top:1px dashed #E2E8F0;padding-top:6px;">
-                    <div><b>Provider:</b> ${cfg.name} (${cfg.detail})</div>
+                    <div><b>Provider:</b> ${provName} (${provDetail})</div>
                     <div><b>Technology:</b> FTTP (${cfg.speeds} Mbps)</div>
                     <div><b>Filing:</b> Jun 2025 (pub. Feb 2026)</div>
                 </div>
@@ -1315,7 +1337,18 @@
             feats.forEach(f => allStates.add(f.properties.state));
             totalBGs += bgs;
             totalBSLs += bsls;
-            if (bgs > 0) parts.push(`${cfg.name}: ${bgs.toLocaleString()} BGs / ${bsls.toLocaleString()} BSLs`);
+            // For combined layer, show sub-counts
+            let label = cfg.name;
+            if (key === 'verizon_frontier' && bgs > 0) {
+                const vzFeats = feats.filter(f => f.properties._src === 'verizon');
+                const frFeats = feats.filter(f => f.properties._src === 'frontier');
+                const vzBSLs = vzFeats.reduce((s, f) => s + f.properties.bsls, 0);
+                const frBSLs = frFeats.reduce((s, f) => s + f.properties.bsls, 0);
+                label = `VZ: ${vzFeats.length.toLocaleString()} BGs/${vzBSLs.toLocaleString()} + FR: ${frFeats.length.toLocaleString()} BGs/${frBSLs.toLocaleString()}`;
+                parts.push(label);
+            } else if (bgs > 0) {
+                parts.push(`${label}: ${bgs.toLocaleString()} BGs / ${bsls.toLocaleString()} BSLs`);
+            }
         });
         const statsEl = document.getElementById('bdcStats');
         if (parts.length > 0) {
